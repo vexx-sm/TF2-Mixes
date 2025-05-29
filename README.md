@@ -29,7 +29,7 @@ A SourceMod plugin that sets up a 6v6 competitive mix with team captains and dra
 
 - `!captain` Become or get dropped as a team captain 
 - `!draft` or `!pick` Open the draft menu to pick players (only works for current captain during their turn)
-- `!draft player123 or `!pick player123` Directly pick a player by name (only works for current captain during their turn, partial names work too)
+- `!draft player123` or `!pick player123` Directly pick a player by name (only works for current captain during their turn, partial names work too)
 - `!votemix` Start a vote to cancel the current mix (2-minute global cooldown between votes)
 
 ## Admin Commands
@@ -37,7 +37,7 @@ A SourceMod plugin that sets up a 6v6 competitive mix with team captains and dra
 - `!setcaptain <player>` Set or remove a player as captain 
 - `!adminpick <player>` Force pick a player for the current captain's team
 - `!autodraft` Automatically draft remaining players to open team slots
-- `!cancelmix` Cancel current mix reset
+- `!cancelmix` Cancel current mix and reset
 
 ## Requirements
 
