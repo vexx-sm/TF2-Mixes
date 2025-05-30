@@ -49,7 +49,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 
 ## Installation
 
-1. Download the latest `draft.smx` from the [Releases](https://github.com/vexx-sm/TF2-Mixes/releases) page and place it in your `sourcemod\plugins` folder.
+1. Download the latest `mixes.smx` from the [Releases](https://github.com/vexx-sm/TF2-Mixes/releases) page and place it in your `sourcemod\plugins` folder.
 2. Reload the plugin or restart your server.
 
 ## License & Contributing
