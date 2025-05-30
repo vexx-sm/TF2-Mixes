@@ -1,6 +1,9 @@
 <h1 align="center">Team Fortress 2 Mixes</h1>
 
-A SourceMod plugin that sets up a 6v6 competitive mixes
+A SourceMod plugin that sets up a 6v6 competitive mixes wehere 2 capatains can pick players in an XYXY XYXY fashion. Random drafting, votes and more.
+
+> [!IMPORTANT]
+> The plugin is in an early stage and currently serves as a base. 12v12 and much more is planned.
 
 https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 
