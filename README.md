@@ -1,4 +1,4 @@
-<h1 align="center">Team Fortress 2 Mixs</h1>
+<h1 align="center">Team Fortress 2 Mixes</h1>
 
 A SourceMod plugin that sets up a 6v6 competitive mixes
 
