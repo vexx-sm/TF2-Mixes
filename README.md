@@ -31,7 +31,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 
 ## Commands
 
-- `!captain` Become or get dropped as a team captain 
+- `!captain` or `!cap` Become or get dropped as a team captain 
 - `!draft` or `!pick` Open the draft menu to pick players (only works for current captain during their turn)
 - `!draft player123` or `!pick player123` Directly pick a player by name (only works for current captain during their turn, partial names work too)
 - `!votemix` Start a vote to cancel the current mix (2-minute global cooldown between votes)
