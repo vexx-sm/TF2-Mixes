@@ -175,6 +175,12 @@ public void OnClientDisconnect(int client) {
 public Action Command_Captain(int client, int args) {
     if (!IsValidClient(client))
         return Plugin_Handled;
+    
+    // Only allow captain commands in pre-draft phase
+    if (g_bMixInProgress) {
+        ReplyToCommand(client, "\x01[Mix] \x03Captain selection is only available before the draft starts!");
+        return Plugin_Handled;
+    }
         
     // Check cooldown
     float currentTime = GetGameTime();
@@ -407,24 +413,22 @@ public Action Command_Draft(int client, int args) {
     if (!IsValidClient(client))
         return Plugin_Handled;
 
-    // Check if draft is in progress and if it's this captain's turn
-    if (g_bMixInProgress) {
-        int expectedCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
-        if (client != expectedCaptain) {
-            int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
-            if (IsValidClient(currentCaptain)) {
-                 ReplyToCommand(client, "\x01[Mix] \x03It is %N's turn to pick!", currentCaptain); // Only reply to the player out of turn
-            } else {
-                 // Fallback message if the current captain is somehow invalid
-                 ReplyToCommand(client, "\x01[Mix] \x03It is not your turn to pick!");
-            }
-            return Plugin_Handled;
+    // Only allow draft commands during active draft phase (when picks are remaining)
+    if (!g_bMixInProgress || g_iPicksRemaining <= 0) {
+        ReplyToCommand(client, "\x01[Mix] \x03Draft commands are only available during the active draft phase!");
+        return Plugin_Handled;
+    }
+    
+    // Check if it's this captain's turn
+    int expectedCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
+    if (client != expectedCaptain) {
+        int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
+        if (IsValidClient(currentCaptain)) {
+             ReplyToCommand(client, "\x01[Mix] \x03It is %N's turn to pick!", currentCaptain);
+        } else {
+             ReplyToCommand(client, "\x01[Mix] \x03It is not your turn to pick!");
         }
-    } else { // If draft is not in progress, only captains should be able to access this command (for menu)
-        if (client != g_iCaptain1 && client != g_iCaptain2) {
-            ReplyToCommand(client, "\x01[Mix] \x03Only team captains can initiate or manage the draft!"); // Only reply to the player
-            return Plugin_Handled;
-        }
+        return Plugin_Handled;
     }
     
     // Rest of the drafting logic
