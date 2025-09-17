@@ -14,7 +14,7 @@ public Plugin myinfo = {
     name = "TF2-Mixes",
     author = "vexx-sm",
     description = "A TF2 SourceMod plugin that sets up a 6s mix",
-    version = "0.1.0",
+    version = "0.1.1",
     url = "https://github.com/vexx-sm/TF2-Mixes"
 };
 
@@ -73,7 +73,10 @@ public void OnPluginStart() {
     
     // Register commands
     RegConsoleCmd("sm_captain", Command_Captain, "Become a captain");
+    RegConsoleCmd("sm_cap", Command_Captain, "Become a captain");
     RegConsoleCmd("sm_mix", Command_Mix, "Start a new mix");
+    RegConsoleCmd("sm_draft", Command_Draft, "Draft a player or show draft menu");
+    RegConsoleCmd("sm_pick", Command_Draft, "Draft a player or show draft menu");
     RegConsoleCmd("sm_cancelmix", Command_CancelMix, "Cancel current mix");
     
     // Admin commands
@@ -83,6 +86,7 @@ public void OnPluginStart() {
     
     // Create CVars
     g_cvPickTimeout = CreateConVar("sm_mix_pick_timeout", "30.0", "Time limit for picks in seconds");
+    g_cvCommandCooldown = CreateConVar("sm_mix_command_cooldown", "5.0", "Cooldown time for commands in seconds");
     g_cvGracePeriod = CreateConVar("sm_mix_grace_period", "60.0", "Time to wait for disconnected captain");
     g_cvVoteDuration = CreateConVar("sm_mix_vote_duration", "30.0", "Duration of the mix vote in seconds");
     
@@ -95,10 +99,10 @@ public void OnPluginStart() {
     g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
     
     // Print signature
-    PrintToServer("╔════════════════════════════════════════════════════════════╗");
-    PrintToServer("║  TF2-Mixes v0.1.0 | 6s Competitive Mix System             ║");
-    PrintToServer("║  Author: vexx-sm | Type !help for commands                ║");
-    PrintToServer("╚════════════════════════════════════════════════════════════╝");
+    PrintToServer("================================================================");
+    PrintToServer("  TF2-Mixes v0.1.1 | 6s Competitive Mix System");
+    PrintToServer("  Author: vexx-sm | Type !help for commands");
+    PrintToServer("================================================================");
 }
 
 public void OnMapStart() {
@@ -1040,7 +1044,47 @@ void UpdateHUDForAll() {
     
     // Build HUD message based on current state
     if (g_bMixInProgress) {
-        Format(buffer, sizeof(buffer), "Mix in progress\nTeams are locked");
+        // Check if we're in grace period
+        if (g_iMissingCaptain != -1) {
+            float timeLeft = g_cvGracePeriod.FloatValue - (GetGameTime() - g_fPickTimerStartTime);
+            if (timeLeft < 0.0) timeLeft = 0.0;
+            
+            char captainName[MAX_NAME_LENGTH];
+            if (g_iMissingCaptain == 0) {
+                strcopy(captainName, sizeof(captainName), "First Captain");
+            } else {
+                strcopy(captainName, sizeof(captainName), "Second Captain");
+            }
+            
+            Format(buffer, sizeof(buffer), "DRAFT PAUSED\n%s disconnected!\nReplacement needed: %.0fs", captainName, timeLeft);
+        }
+        // Check if we're in active draft (picks remaining)
+        else if (g_iPicksRemaining > 0) {
+            int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
+            char captainName[MAX_NAME_LENGTH];
+            
+            if (IsValidClient(currentCaptain)) {
+                GetClientName(currentCaptain, captainName, sizeof(captainName));
+            } else {
+                strcopy(captainName, sizeof(captainName), "Unknown Captain");
+            }
+            
+            // Calculate time remaining
+            float timeLeft = g_cvPickTimeout.FloatValue - (GetGameTime() - g_fPickTimerStartTime);
+            if (timeLeft < 0.0) timeLeft = 0.0;
+            
+            // Calculate picks per team
+            int picksPerTeam = (g_iPicksRemaining + 1) / 2; // +1 to account for current pick
+            int team1Picks = (g_iCurrentPicker == 0) ? picksPerTeam : picksPerTeam - 1;
+            int team2Picks = (g_iCurrentPicker == 1) ? picksPerTeam : picksPerTeam - 1;
+            
+            Format(buffer, sizeof(buffer), "DRAFT IN PROGRESS\n%s's turn to pick\nTime: %.0fs\nTeam 1: %d picks | Team 2: %d picks", 
+                   captainName, timeLeft, team1Picks, team2Picks);
+        }
+        // Draft is complete, mix is active
+        else {
+            Format(buffer, sizeof(buffer), "MIX IN PROGRESS\nTeams are locked");
+        }
     } else {
         Format(buffer, sizeof(buffer), "Type !captain to become a captain");
     }
@@ -1181,7 +1225,7 @@ public Action Command_VoteMix(int client, int args) {
     if (!IsValidClient(client))
         return Plugin_Handled;
         
-    if (!g_bMixInProgress && !g_bMixInProgress) {
+    if (!g_bMixInProgress) {
         ReplyToCommand(client, "\x01[Mix] \x03No mix is currently in progress!");
         return Plugin_Handled;
     }
@@ -1630,7 +1674,7 @@ public Action Command_CancelMix(int client, int args) {
         return Plugin_Handled;
     }
     
-    if (!g_bMixInProgress && !g_bMixInProgress) {
+    if (!g_bMixInProgress) {
         ReplyToCommand(client, "\x01[Mix] \x03No mix is currently in progress!");
         return Plugin_Handled;
     }
