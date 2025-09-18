@@ -77,6 +77,8 @@ public void OnPluginStart() {
     RegConsoleCmd("sm_mix", Command_Mix, "Start a new mix");
     RegConsoleCmd("sm_draft", Command_Draft, "Draft a player or show draft menu");
     RegConsoleCmd("sm_pick", Command_Draft, "Draft a player or show draft menu");
+    RegConsoleCmd("sm_votemix", Command_VoteMix, "Vote to restart the current mix");
+    RegConsoleCmd("sm_cancel", Command_VoteMix, "Vote to restart the current mix");
     RegConsoleCmd("sm_cancelmix", Command_CancelMix, "Cancel current mix");
     
     // Admin commands
@@ -156,14 +158,20 @@ public void OnClientDisconnect(int client) {
     if (client == g_iCaptain1) {
         g_iCaptain1 = -1;
         if (g_bMixInProgress) {
-            StartGracePeriod(0); // 0 for Captain1
+            // Don't start grace period for bots during draft
+            if (!IsFakeClient(client) || g_iPicksRemaining <= 0) {
+                StartGracePeriod(0); // 0 for Captain1
+            }
         } else {
             PrintToChatAll("\x01[Mix] \x03First captain has left the game!");
         }
     } else if (client == g_iCaptain2) {
         g_iCaptain2 = -1;
         if (g_bMixInProgress) {
-            StartGracePeriod(1); // 1 for Captain2
+            // Don't start grace period for bots during draft
+            if (!IsFakeClient(client) || g_iPicksRemaining <= 0) {
+                StartGracePeriod(1); // 1 for Captain2
+            }
         } else {
             PrintToChatAll("\x01[Mix] \x03Second captain has left the game!");
         }
@@ -633,7 +641,7 @@ public void PickPlayer(int captain, int target) {
     g_fPickTimerStartTime = GetGameTime();
     
     // Manually update HUD after a pick
-    Timer_UpdateHUD(g_hHudTimer);
+    UpdateHUDForAll();
 }
 
 public void EndDraft() {
@@ -716,6 +724,11 @@ public Action Event_PlayerTeam(Event event, const char[] name, bool dontBroadcas
     
     if (!IsValidClient(client) || disconnect)
         return Plugin_Continue;
+    
+    // Skip team change restrictions for bots during draft phase to prevent disconnections
+    if (IsFakeClient(client) && g_bMixInProgress && g_iPicksRemaining > 0) {
+        return Plugin_Continue;
+    }
         
     // If player is locked to a team AND we are in a mix, prevent team change
     if (g_bMixInProgress && g_bPlayerLocked[client]) {
@@ -726,10 +739,18 @@ public Action Event_PlayerTeam(Event event, const char[] name, bool dontBroadcas
         }
     }
     
-    // During draft, ensure players (excluding captains) moving *from* unassigned/other to a team other than spectator are moved back.
-    // Captains are handled in StartDraft.
-    if (g_bMixInProgress && client != g_iCaptain1 && client != g_iCaptain2) {
-         // If they are moving to a team that isn't spectator, move them back to spectator
+    // During draft phase (when picks are remaining), prevent non-captains from switching teams
+    if (g_bMixInProgress && g_iPicksRemaining > 0 && client != g_iCaptain1 && client != g_iCaptain2) {
+        // If they are moving to a team that isn't spectator, move them back to spectator
+        if (view_as<TFTeam>(newTeam) != TFTeam_Spectator) {
+            TF2_ChangeClientTeam(client, view_as<TFTeam>(TFTeam_Spectator));
+            return Plugin_Handled;
+        }
+    }
+    
+    // During mix phase (after draft complete), prevent all team changes
+    if (g_bMixInProgress && g_iPicksRemaining <= 0) {
+        // Allow only spectator movement during mix
         if (view_as<TFTeam>(newTeam) != TFTeam_Spectator) {
             TF2_ChangeClientTeam(client, view_as<TFTeam>(TFTeam_Spectator));
             return Plugin_Handled;
@@ -742,7 +763,9 @@ public Action Event_PlayerTeam(Event event, const char[] name, bool dontBroadcas
 public Action Timer_ForceTeam(Handle timer, any userid) {
     int client = GetClientOfUserId(userid);
     // Only run if client is valid AND we are in a mix AND client is locked
-    if (IsValidClient(client) && g_bMixInProgress && g_bPlayerLocked[client]) {
+    // Skip for bots during draft phase to prevent disconnections
+    if (IsValidClient(client) && g_bMixInProgress && g_bPlayerLocked[client] && 
+        !(IsFakeClient(client) && g_iPicksRemaining > 0)) {
         int currentTeam = view_as<TFTeam>(GetClientTeam(client));
         if (view_as<TFTeam>(currentTeam) == TFTeam_Spectator) { // If they're in spectator, force them back to their team
             // Find their original team
@@ -962,6 +985,76 @@ public int VoteMenuHandler(Menu menu, MenuAction action, int param1, int param2)
     return 0;
 }
 
+void ShowRestartVoteMenu(int client) {
+    if (!IsValidClient(client))
+        return;
+        
+    Menu menu = new Menu(RestartVoteMenuHandler, MENU_ACTIONS_ALL);
+    menu.SetTitle("Restart Draft Vote - What would you like to do?");
+    
+    menu.AddItem("continue", "Continue with current draft");
+    menu.AddItem("restart", "Restart draft from beginning");
+    
+    menu.ExitButton = false;
+    menu.Display(client, MENU_TIME_FOREVER);
+}
+
+public int RestartVoteMenuHandler(Menu menu, MenuAction action, int param1, int param2) {
+    switch (action) {
+        case MenuAction_End: {
+            delete menu;
+        }
+        case MenuAction_Select: {
+            if (!IsValidClient(param1) || g_bPlayerVoted[param1])
+                return 0;
+                
+            g_bPlayerVoted[param1] = true;
+            
+            char info[32];
+            menu.GetItem(param2, info, sizeof(info));
+            
+            if (StrEqual(info, "continue")) {
+                g_iVoteCount[0]++;
+                PrintToChatAll("\x01[Mix] \x03%N\x01 voted to continue with current draft", param1);
+            } else if (StrEqual(info, "restart")) {
+                g_iVoteCount[1]++;
+                PrintToChatAll("\x01[Mix] \x03%N\x01 voted to restart the draft", param1);
+            }
+        }
+        case MenuAction_Cancel: {
+            if (param2 == MenuCancel_Exit) {
+                // Player closed the menu without voting
+                if (IsValidClient(param1)) {
+                    PrintToChat(param1, "\x01[Mix] \x03You must vote to continue!");
+                    ShowRestartVoteMenu(param1);
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+public Action Timer_EndRestartVote(Handle timer) {
+    g_hVoteTimer = INVALID_HANDLE;
+    
+    // Count total votes
+    int totalVotes = g_iVoteCount[0] + g_iVoteCount[1];
+    if (totalVotes == 0) {
+        PrintToChatAll("\x01[Mix] \x03No votes cast. Continuing with current draft.");
+        return Plugin_Stop;
+    }
+    
+    // Check for majority (simple majority, not 2/3)
+    if (g_iVoteCount[1] > g_iVoteCount[0]) {
+        PrintToChatAll("\x01[Mix] \x03Vote passed: Restarting draft from beginning.");
+        EndMix(true); // true = start new draft
+    } else {
+        PrintToChatAll("\x01[Mix] \x03Vote failed: Continuing with current draft.");
+    }
+    
+    return Plugin_Stop;
+}
+
 public Action Timer_EndVote(Handle timer) {
     g_hVoteTimer = INVALID_HANDLE;
     
@@ -1082,7 +1175,7 @@ void UpdateHUDForAll() {
             int team1Picks = (g_iCurrentPicker == 0) ? picksPerTeam : picksPerTeam - 1;
             int team2Picks = (g_iCurrentPicker == 1) ? picksPerTeam : picksPerTeam - 1;
             
-            Format(buffer, sizeof(buffer), "DRAFT IN PROGRESS\n%s's turn to pick\nTime: %.0fs\nTeam 1: %d picks | Team 2: %d picks", 
+            Format(buffer, sizeof(buffer), "DRAFT IN PROGRESS\n%s's turn to pick\nTime: %.0fs\nRED: %d picks | BLU: %d picks", 
                    captainName, timeLeft, team1Picks, team2Picks);
         }
         // Draft is complete, mix is active
@@ -1093,11 +1186,10 @@ void UpdateHUDForAll() {
         Format(buffer, sizeof(buffer), "Type !captain to become a captain");
     }
     
-    // Display HUD message to all players
+    // Display HUD message to all players using HL2-style hint text
     for (int i = 1; i <= MaxClients; i++) {
         if (IsValidClient(i) && !IsFakeClient(i)) {
-            SetHudTextParams(-1.0, 0.1, 1.1, 255, 255, 255, 255, 0, 0.0, 0.0, 0.0);
-            ShowHudText(i, -1, buffer);
+            PrintHintText(i, "%s", buffer);
         }
     }
 }
@@ -1153,7 +1245,7 @@ public Action Timer_GracePeriod(Handle timer) {
 // Helper function to find next available player
 int FindNextAvailablePlayer() {
     for (int i = 1; i <= MaxClients; i++) {
-        if (IsValidClient(i) && !g_bPlayerPicked[i] && i != g_iCaptain1 && i != g_iCaptain2) {
+        if (IsValidClient(i) && view_as<TFTeam>(GetClientTeam(i)) == TFTeam_Spectator && i != g_iCaptain1 && i != g_iCaptain2) {
             return i;
         }
     }
@@ -1257,10 +1349,10 @@ public Action Command_VoteMix(int client, int args) {
         g_bPlayerVoted[i] = false;
     }
     
-    // Show vote menu to all players
+    // Show restart vote menu to all players
     for (int i = 1; i <= MaxClients; i++) {
         if (IsValidClient(i)) {
-            ShowVoteMenu(i);
+            ShowRestartVoteMenu(i);
         }
     }
     
@@ -1268,10 +1360,10 @@ public Action Command_VoteMix(int client, int args) {
     if (g_hVoteTimer != INVALID_HANDLE) {
         KillTimer(g_hVoteTimer);
     }
-    g_hVoteTimer = CreateTimer(30.0, Timer_EndVote); // 30 second vote duration
+    g_hVoteTimer = CreateTimer(30.0, Timer_EndRestartVote); // 30 second vote duration
     
     // Show vote started message
-    PrintToChatAll("\x01[Mix] \x03%N has started a vote to cancel the mix!", client);
+    PrintToChatAll("\x01[Mix] \x03%N has started a vote to restart the draft!", client);
     PrintToChatAll("\x01[Mix] \x03You have 30 seconds to vote.");
     
     return Plugin_Handled;
@@ -1392,9 +1484,11 @@ public Action Command_AutoDraft(int client, int args) {
         return Plugin_Handled;
     }
     
-    // Auto-draft players
+    // Auto-draft players to fill 6v6 teams (10 total picks needed)
     int draftedCount = 0;
-    while (g_iPicksRemaining > 0 && spectators.Length > 0) {
+    int totalPicksNeeded = 10; // 5 players per team for 6v6
+    
+    while (g_iPicksRemaining > 0 && spectators.Length > 0 && draftedCount < totalPicksNeeded) {
         int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
         
         // Get a random target from remaining spectators
@@ -1407,9 +1501,6 @@ public Action Command_AutoDraft(int client, int args) {
         // Perform the draft
         PickPlayer(currentCaptain, targetClient); // This function handles switching picker and checking completion
         draftedCount++;
-        
-        // Add a small delay to prevent potential server strain from rapid team changes, if needed
-        // CreateTimer(0.1, Timer_AutoDraftStep, targetClient); // Example of delayed step
     }
     
     delete spectators;
@@ -1664,7 +1755,7 @@ public Action Command_AdminPick(int client, int args) {
     g_fPickTimerStartTime = GetGameTime();
     
     // Manually update HUD after admin pick
-    Timer_UpdateHUD(g_hHudTimer);
+    UpdateHUDForAll();
     
     return Plugin_Handled;
 }
@@ -1691,31 +1782,30 @@ public Action Timer_PickTimeout(Handle timer) {
     if (!g_bMixInProgress)
         return Plugin_Stop;
         
-    // Notify about timeout
-    PrintToChatAll("\x01[Mix] \x03Pick timed out! Switching to next captain.");
+    // Get current captain
+    int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
     
-    // Switch to next picker
-    g_iCurrentPicker = (g_iCurrentPicker == 0) ? 1 : 0;
-    int nextCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
-    
-    // Notify next picker
-    if (IsValidClient(nextCaptain)) {
-        PrintToChatAll("\x01[Mix] \x03%N's turn to pick! (%d picks remaining)", nextCaptain, g_iPicksRemaining);
-    } else {
-        PrintToChatAll("\x01[Mix] \x03The next captain is unavailable. Draft may need to be cancelled.");
+    if (!IsValidClient(currentCaptain)) {
+        PrintToChatAll("\x01[Mix] \x03Current captain is unavailable. Draft may need to be cancelled.");
         KillTimerSafely(g_hPickTimer);
         g_fPickTimerStartTime = 0.0;
-        Timer_UpdateHUD(g_hHudTimer);
+        // Force immediate HUD update
+        UpdateHUDForAll();
         return Plugin_Stop;
     }
     
-    // Reset pick timeout timer
-    KillTimerSafely(g_hPickTimer);
-    g_hPickTimer = CreateTimer(g_cvPickTimeout.FloatValue, Timer_PickTimeout);
-    g_fPickTimerStartTime = GetGameTime();
+    // Find a random available player to auto-pick
+    int randomPlayer = FindNextAvailablePlayer();
     
-    // Manually update HUD after timeout
-    Timer_UpdateHUD(g_hHudTimer);
+    if (randomPlayer != -1) {
+        // Auto-pick the random player
+        PrintToChatAll("\x01[Mix] \x03Pick timed out! Auto-picking random player.");
+        PickPlayer(currentCaptain, randomPlayer);
+    } else {
+        // No players left to pick, end draft
+        PrintToChatAll("\x01[Mix] \x03Pick timed out! No players available. Ending draft.");
+        EndDraft();
+    }
     
     return Plugin_Stop;
 }
