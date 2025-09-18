@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 
 1. **Setup Phase**:
    - 2 Players use `!captain` or `!cap` to become or drop themselves as team captains.
-   - Once two captains are selected and a minimum of 12 players are present, All other players are moved to spectator with 2 captains randomly assigned to red or blu
+   - Once two captains are selected and a minimum of 12 players are present, All other players are moved to spectator with the 2 captains randomly assigned to red or blu
 
 2. **Drafting Phase**:
    - Captains take turns picking players (XYXY XYXY XY pattern)
