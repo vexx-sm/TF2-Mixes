@@ -16,9 +16,9 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 
 2. **Drafting Phase**:
    - Captains take turns picking players (XYXY XYXY XY pattern)
+   - Picked players are automatically moved to their captain's team
    - Each captain has a 30 second timer to make their pick. If the timer expires, a random player is auto-picked and the turn passes to the other team
    - If a captain disconnects or drop their captain stat, a 30 second grace period starts for a replacement after which the game is canceled if no replacement is present
-   - Picked players are automatically moved to their captain's team
 
 3. **Gameplay Phase**:
    - Teams are locked to prevent switching
