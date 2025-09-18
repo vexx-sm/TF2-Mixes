@@ -2,6 +2,7 @@
 
 A SourceMod plugin that sets up a 6v6 competitive mix where 2 captains can pick players in an XYXY XYXY XY fashion. Random drafting, votes and more.
 
+
 > [!IMPORTANT]
 > The plugin is in an early stage and currently serves as a base. 12v12 and much more is planned.
 
@@ -10,24 +11,25 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 
 ## How It Works
 
-1. **Setup Phase**:
-   - 2 Players use `!captain` or `!cap` to become or drop themselves as team captains.
-   - Once two captains are selected and a minimum of 12 players are present, All other players are moved to spectator with the 2 captains randomly assigned to red or blu
+### 1. Setup Phase
+- 2 Players use `!captain` or `!cap` to become or drop themselves as team captains.  
+- Once two captains are selected and a minimum of 12 players are present, all other players are moved to spectator with the 2 captains randomly assigned to red or blu.  
 
-2. **Drafting Phase**:
-   - Captains take turns picking players (XYXY XYXY XY pattern)
-   - Picked players are automatically moved to their captain's team
-   - Each captain has a 30 second timer to make their pick. If the timer expires, a random player is auto-picked and the turn passes to the other team
-   - If a captain disconnects or drop their captain stat, a 30 second grace period starts for a replacement after which the game is canceled if no replacement is present
+### 2. Drafting Phase
+- Captains take turns picking players (XYXY XYXY XY pattern).  
+- Picked players are automatically moved to their captain's team.  
+- Each captain has a 30 second timer to make their pick. If the timer expires, a random player is auto-picked and the turn passes to the other team.  
+- If a captain disconnects or drop their captain stat, a 30 second grace period starts for a replacement after which the game is canceled if no replacement is present.  
 
-3. **Game Phase**:
-   - Teams are locked to prevent switching
-   - Players can change classes but not teams
-   - At the end of each round, a vote starts for:
-     - Continue with same teams
-     - Start new draft
-     - End mix
-   - 2/3 majority required for vote to pass
+### 3. Game Phase
+- Teams are locked to prevent switching.  
+- Players can change classes but not teams.  
+- At the end of each round, a vote starts for:  
+  - Continue with same teams  
+  - Start new draft  
+  - End mix  
+- 2/3 majority required for vote to pass.  
+
 
 ## Commands
 
@@ -46,7 +48,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 
 ## Installation
 
-1. Download the latest **SourceMod** version [here](https://www.sourcemod.net/post-download.php).
+1. Download the latest **SourceMod** version [here]([https://www.sourcemod.net/post-download.php](https://www.sourcemod.net/downloads.php?branch=stable)).
 2. Download the latest **`mixes.smx`** from the [Releases](https://github.com/vexx-sm/TF2-Mixes/releases) page.  
 3. Place it in your `sourcemod/plugins` folder.  
 4. Reload the plugin or restart your server.  
