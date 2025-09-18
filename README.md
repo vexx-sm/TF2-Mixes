@@ -53,7 +53,8 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 4. Reload the plugin or restart your server.  
 
 ---
-**Requests & Contributions** are welcome! Feel free to submit a pull request or just add <a href="https://steamcommunity.com/id/57FN" target="_blank">me</a>.
+**Requests & Contributions** are welcome! Feel free to submit a pull request or just add [me](https://steamcommunity.com/id/57FN).
+
 
 
 <details>
