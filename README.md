@@ -20,7 +20,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
    - Each captain has a 30 second timer to make their pick. If the timer expires, a random player is auto-picked and the turn passes to the other team
    - If a captain disconnects or drop their captain stat, a 30 second grace period starts for a replacement after which the game is canceled if no replacement is present
 
-3. **Gameplay Phase**:
+3. **Game Phase**:
    - Teams are locked to prevent switching
    - Players can change classes but not teams
    - At the end of each round, a vote starts for:
