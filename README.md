@@ -44,17 +44,29 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - `!autodraft` Automatically draft remaining players to open team slots
 - `!cancelmix` Cancel current mix and reset
 
-## Requirements
-
-- The latest [SourceMod](https://www.sourcemod.net/downloads.php) release
-
 ## Installation
 
-1. Download the latest `mixes.smx` from the [Releases](https://github.com/vexx-sm/TF2-Mixes/releases) page and place it in your `sourcemod\plugins` folder.
-2. Reload the plugin or restart your server.
+1. Download the latest **SourceMod** version [here](https://www.sourcemod.net/post-download.php).
+2. Download the latest **`mixes.smx`** from the [Releases](https://github.com/vexx-sm/TF2-Mixes/releases) page.  
+3. Place it in your `sourcemod/plugins` folder.  
+4. Reload the plugin or restart your server.  
 
-## License & Contributing
+---
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+**Requests & Contributions** are welcome! Feel free to submit a Pull Request.
 
-**Requests** & Contributions are welcome! Feel free to submit a Pull Request.
+
+<details>
+<summary> To do?</summary>
+
+- Replace single mix flag with proper `MixState` system.  
+- Configurable team sizes (4v4, 6v6, Highlander).  
+- HUD customization.  
+- Improved captain handling (grace period, auto-replacement).  
+- Smarter auto-draft and configurable voting.  
+- `sm_forcestart`, `sm_shuffle`, `sm_mixstatus`.  
+- Logging, webhooks.  
+- Better late-join and spectator handling.  
+- Match QoL: auto-pause and ready-up system.  
+
+</details>
