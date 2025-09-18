@@ -1,6 +1,6 @@
 <h1 align="center">Team Fortress 2 Mixes</h1>
 
-A SourceMod plugin that sets up a 6v6 competitive mixe where 2 captains can pick players in an XYXY XYXY XY fashion. Random drafting, votes and more.
+A SourceMod plugin that sets up a 6v6 competitive mix where 2 captains can pick players in an XYXY XYXY XY fashion. Random drafting, votes and more.
 
 > [!IMPORTANT]
 > The plugin is in an early stage and currently serves as a base. 12v12 and much more is planned.
@@ -16,8 +16,8 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 
 2. **Drafting Phase**:
    - Captains take turns picking players (XYXY XYXY XY pattern)
-   - Each captain has a 30 second timer to make their pick, if the timer is over the turn is passed to the other team
-   - If a captain disconnects or drop thier captain stat, a 30 second grace period starts for a replacement after which the game is canceled if no replacement is present
+   - Each captain has a 30 second timer to make their pick. If the timer expires, a random player is auto-picked and the turn passes to the other team
+   - If a captain disconnects or drop their captain stat, a 30 second grace period starts for a replacement after which the game is canceled if no replacement is present
    - Picked players are automatically moved to their captain's team
 
 3. **Gameplay Phase**:
@@ -35,6 +35,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - `!draft` or `!pick` - Open the draft menu to pick players (only works for current captain during their turn)
 - `!draft player123` or `!pick player123` - Directly pick a player by name (only works for current captain during their turn, partial names work too)
 - `!votemix` or `!cancel` - Start a vote to cancel the current mix (2-minute global cooldown between votes)
+- ~~`!mix` - Start a new mix (if no mix is in progress)~~
 
 ## Admin Commands
 
