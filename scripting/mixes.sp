@@ -1662,7 +1662,7 @@ public Action Command_SetCaptain(int client, int args) {
         PrintToChat(targetClient, "\x01[Mix] \x03You have been set as the second captain by an admin!");
     }
     
-    // Check if we can start drafting
+    // Check if we can start drafting.
     CheckDraftStart();
     
     return Plugin_Handled;
