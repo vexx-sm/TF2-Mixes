@@ -53,8 +53,8 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 4. Reload the plugin or restart your server.  
 
 ---
-
 **Requests & Contributions** are welcome! Feel free to submit a pull request or just add [me](https://steamcommunity.com/id/57FN).
+
 
 
 <details>
@@ -65,10 +65,8 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - HUD customization.  
 - Improved captain handling (grace period, auto-replacement).  
 - Smarter auto-draft and configurable voting.  
-- `sm_forcestart`, `sm_shuffle`, `sm_mixstatus`.  
-- Logging, webhooks.  
+- `sm_forcestart`, `sm_shuffle`, `sm_mixstatus`.   
 - Better late-join and spectator handling.  
 - Match QoL: auto-pause and ready-up system.  
 
 </details>
-
