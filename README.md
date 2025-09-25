@@ -19,15 +19,18 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - Captains take turns picking players (XYXY - XYXY - XY pattern).  
 - Picked players are automatically moved to their captain's team.  
 - Each captain has a 30 second timer to make their pick. If the timer expires, a random player is auto-picked and the turn passes to the other team.  
-- If a captain disconnects or drop their captain stat, a 30 second grace period starts for a replacement after which the game is canceled if no replacement is present.  
+- Captains can use `!remove` to remove players from their team (counts as a turn).
+- When teams reach 6v6, a 10-second countdown begins before the game starts.
+- If a captain disconnects or drop their captain stat, a 60 second grace period starts for a replacement after which the game is canceled if no replacement is present.  
 
 ### 3. Game Phase
 - Players can change classes but not teams.  
+- Pre-game DM is available during lobby and draft phases with random spawn points.
 - At the end of each round, a vote starts for:  
   - Continue with same teams  
   - Start new draft  
   - End mix  
-- 2/3 majority required for votes to pass.  
+- 30% of current players required for votes to pass.  
 
 
 ## Commands
@@ -35,6 +38,9 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - `!captain` or `!cap` - Become or get dropped as a team captain 
 - `!draft` or `!pick` - Open the draft menu to pick players (only works for current captain during their turn)
 - `!draft player123` or `!pick player123` - Directly pick a player by name (only works for current captain during their turn, partial names work too)
+- `!remove` - Remove a player from your team (captains only, counts as a turn)
+- `!restart` or `!redraft` - Start a vote to restart the current draft (30% of players required)
+- `!helpmix` or `!help` - Show help menu with all available commands
 - `!votemix` or `!cancel` - Start a vote to cancel the current mix (2-minute global cooldown between votes)
 - ~~`!mix` - Start a new mix (if no mix is in progress)~~
 
@@ -43,6 +49,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - `!setcaptain <player>` Set or remove a player as captain 
 - `!adminpick <player>` Force pick a player for the current captain's team
 - `!autodraft` Automatically draft remaining players to open team slots
+- `!outline` - Toggle teammate outlines for all players (condition 114)
 - `!cancelmix` Cancel current mix and reset
 
 ## Installation
