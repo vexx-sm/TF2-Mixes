@@ -31,7 +31,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - Any vote requuires 30% of current players to iniate, with 2/3 required to pass.  
 
 > [!NOTE]
-> Pre-game DM requires the provided config/mixes, otherwise random spawns will not work.
+> Pre-game DM requires the provided [config/mixes](https://github.com/vexx-sm/TF2-Mixes/tree/main/configs), otherwise random spawns will not work.
 
 ## Commands
 
