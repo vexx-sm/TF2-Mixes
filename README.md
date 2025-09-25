@@ -62,17 +62,15 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 
 ---
 
-**Requests & Contributions** are welcome!**
+**Requests & Contributions are welcome!**
 
 <details>
-<summary>Planned Features</summary>
-
-- Replace single mix flag with proper `MixState` system  
-- Configurable team sizes (4v4, 6v6, Highlander)  
-- HUD customization  
-- Improved captain handling (grace period, auto-replacement)  
+<summary>what next?</summary>
+  
+- Configurable team sizes (4v4, 6v6, Highlander)   
+- Improved captain handling (auto-replacement)  
 - Smarter auto-draft and configurable voting  
-- New admin cmds: `sm_forcestart`, `sm_shuffle`, `sm_mixstatus`  
+- New admin cmds: `sm_forcestart`, `sm_shuffle`  
 - Better handling of spectators/late-joins  
 - Match QoL: auto-pause and ready-up system  
 
