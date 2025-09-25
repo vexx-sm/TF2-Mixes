@@ -48,7 +48,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - `!adminpick <player>` — Force pick a player for the current captain  
 - `!autodraft` — Auto-draft remaining players  
 - `!cancelmix` — Cancel the current mix  
-- `!outline` — Toggle teammate outlines (to solve coordination with no comms)
+- `!outline` — Toggle teammate outlines (to help coordination with no comms)
 
 <img width="892" height="563" alt="Screenshot_1" src="https://github.com/user-attachments/assets/9a8b8a89-be9e-4b28-9567-3ac7e5d50912" />
 
