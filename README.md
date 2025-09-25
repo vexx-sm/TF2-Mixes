@@ -5,6 +5,9 @@ A SourceMod plugin that sets up a **6v6 competitive mix** where 2 captains pick 
 > [!IMPORTANT]
 > This plugin is in an early stage and currently serves as a base. 12v12 and other formats are planned.
 
+> [!WARNING]
+> The plugin currently conflicts with [SOAPdm](https://github.com/sapphonie/SOAP-TF2DM) and won't work properly if it's loaded.
+
 https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 
 
