@@ -20,8 +20,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - Picked players are automatically moved to their captain's team.  
 - Each captain has a 30 second timer to make their pick. If the timer expires, a random player is auto-picked and the turn passes to the other team.  
 - Captains can use `!remove` to remove players from their team (counts as a turn).
-- When teams reach 6v6, a 10-second timer begins before the game starts.
-- If a captain disconnects or drop their captain stat, a 60 second grace period starts for a replacement after which the game is canceled if no replacement is present.  
+- When teams reach 6v6, a 10-second timer begins before the game starts. 
 
 ### 3. Game Phase
 - Players can change classes but not teams.  
