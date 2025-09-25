@@ -62,8 +62,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 
 ---
 
-**Requests & Contributions** are welcome!**  
-Submit a PR or add me on [Steam](https://steamcommunity.com/id/57FN).
+**Requests & Contributions** are welcome!**
 
 <details>
 <summary>Planned Features</summary>
