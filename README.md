@@ -3,7 +3,7 @@
 A SourceMod plugin that sets up a **6v6 competitive mix** where 2 captains pick players in an **XYXY XYXY XY** draft order. Includes random drafting, votes, and more.
 
 > [!IMPORTANT]
-> This plugin is in an early stage and currently serves as a base. 12v12 and other formats are planned.
+> This plugin is in an early stage and currently serves as a base. 12v12 and more is planned.
 
 > [!WARNING]
 > The plugin currently conflicts with [SOAPdm](https://github.com/sapphonie/SOAP-TF2DM) and won't work properly if it's loaded.
