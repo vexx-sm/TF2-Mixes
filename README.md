@@ -33,7 +33,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - Any vote requires **30% of players to initiate**, and passes with **⅔ majority**.  
 
 > [!NOTE]
-> Pre-game DM requires the provided [configs](https://github.com/vexx-sm/TF2-Mixes/tree/main/configs), otherwise random spawns won’t work.
+> Pre-game DM requires the provided [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.2.1/configs.zip), otherwise random spawns won’t work.
 
 
 ## Commands
