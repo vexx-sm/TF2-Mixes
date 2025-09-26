@@ -1,19 +1,20 @@
 #include <sourcemod>
 #include <tf2>
 #include <tf2_stocks>
-#include <clientprefs>
 #include <sdktools>
-#include <sdkhooks>
 #include <float>
+#include <SteamWorks>
 
 #pragma semicolon 1
 #pragma newdecls required
+
+#define TEAM_SIZE 6
 
 public Plugin myinfo = {
     name = "TF2-Mixes",
     author = "vexx-sm",
     description = "A TF2 SourceMod plugin that sets up a 6s mix",
-    version = "0.2.0",
+    version = "0.2.1",
     url = "https://github.com/vexx-sm/TF2-Mixes"
 };
 int g_iCaptain1 = -1;
@@ -30,7 +31,7 @@ Handle g_hGraceTimer = INVALID_HANDLE;
 int g_iMissingCaptain = -1;
 int g_iPicksRemaining = 0;
 Handle g_hVoteTimer = INVALID_HANDLE;
-int g_iVoteCount[3] = {0, 0, 0};
+int g_iVoteCount[2] = {0, 0};
 bool g_bPlayerVoted[MAXPLAYERS + 1];
 bool g_bVoteInProgress = false;
 float g_fPickTimerStartTime = 0.0;
@@ -48,13 +49,31 @@ bool g_bPlayerMoved[MAXPLAYERS + 1];
 // Outline system
 bool g_bOutlinesEnabled = false;
 
+// Health regeneration system
+int g_iRegenHP;
+bool g_bRegen[MAXPLAYERS+1];
+bool g_bKillStartRegen;
+float g_fRegenTick;
+float g_fRegenDelay;
+Handle g_hRegenTimer[MAXPLAYERS+1];
+Handle g_hRegenHP;
+Handle g_hRegenTick;
+Handle g_hRegenDelay;
+Handle g_hKillStartRegen;
+int g_iMaxHealth[MAXPLAYERS+1];
+
+// Recent damage tracking for regen
+#define RECENT_DAMAGE_SECONDS 10
+int g_iRecentDamage[MAXPLAYERS+1][MAXPLAYERS+1][RECENT_DAMAGE_SECONDS];
+Handle g_hRecentDamageTimer;
+
 char ETF2L_WHITELIST_PATH[] = "cfg/etf2l_whitelist_6v6.txt";
 
 bool g_bPreGameDMActive = false;
 ConVar g_cvPreGameEnable;
 ConVar g_cvPreGameSpawnProtect;
 
-// SOAP TF2DM spawn system
+// Random spawn system
 bool g_bSpawnRandom;
 bool g_bTeamSpawnRandom;
 Handle g_hTeamSpawnRandom;
@@ -86,6 +105,9 @@ public void OnPluginStart() {
     LoadTranslations("common.phrases");
     LoadTranslations("mixes.phrases");
     
+    // Disable hint text sound to prevent timer noise
+    ServerCommand("sv_hudhint_sound 0");
+    
     RegConsoleCmd("sm_captain", Command_Captain, "Become a captain");
     RegConsoleCmd("sm_cap", Command_Captain, "Become a captain");
     RegConsoleCmd("sm_draft", Command_Draft, "Draft a player or show draft menu");
@@ -104,6 +126,8 @@ public void OnPluginStart() {
     RegAdminCmd("sm_adminpick", Command_AdminPick, ADMFLAG_GENERIC, "Force pick a player");
     RegAdminCmd("sm_autodraft", Command_AutoDraft, ADMFLAG_GENERIC, "Automatically draft teams");
     RegAdminCmd("sm_outline", Command_ToggleOutlines, ADMFLAG_GENERIC, "Toggle teammate outlines for all players");
+    RegAdminCmd("sm_updatemix", Command_UpdateMix, ADMFLAG_ROOT, "Download and install plugin updates");
+    RegConsoleCmd("sm_mixversion", Command_MixVersion, "Show current plugin version and update status");
     
     g_cvPickTimeout = CreateConVar("sm_mix_pick_timeout", "30.0", "Time limit for picks in seconds");
     g_cvCommandCooldown = CreateConVar("sm_mix_command_cooldown", "5.0", "Cooldown time for commands in seconds");
@@ -114,7 +138,13 @@ public void OnPluginStart() {
     g_cvPreGameEnable = CreateConVar("sm_mix_pregame_enable", "1", "Enable pre-game DM during lobby and draft");
     g_cvPreGameSpawnProtect = CreateConVar("sm_mix_pregame_spawnprotect", "1.0", "Pre-game DM spawn protection seconds");
     
-    // SOAP TF2DM spawn convars
+    // Health regeneration ConVars
+    g_hRegenHP = CreateConVar("sm_mix_regenhp", "1", "Health added per regeneration tick. Set to 0 to disable.", FCVAR_NOTIFY);
+    g_hRegenTick = CreateConVar("sm_mix_regentick", "0.1", "Delay between regeneration ticks.", FCVAR_NOTIFY);
+    g_hRegenDelay = CreateConVar("sm_mix_regendelay", "5.0", "Seconds after damage before regeneration.", FCVAR_NOTIFY);
+    g_hKillStartRegen = CreateConVar("sm_mix_kill_start_regen", "1", "Start the heal-over-time regen immediately after a kill.", FCVAR_NOTIFY);
+    
+    // Spawn system convars
     g_hSpawnRandom = CreateConVar("sm_mix_spawnrandom", "1", "Enable random spawns.", FCVAR_NOTIFY);
     g_hTeamSpawnRandom = CreateConVar("sm_mix_teamspawnrandom", "0", "Enable random spawns independent of team", FCVAR_NOTIFY);
     
@@ -123,11 +153,37 @@ public void OnPluginStart() {
     HookEvent("player_team", Event_PlayerTeam);
     HookEvent("player_spawn", Event_PlayerSpawn);
     HookEvent("player_death", Event_PlayerDeath);
+    HookEvent("player_hurt", Event_PlayerHurt);
     
     g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
     g_hTipsTimer = CreateTimer(g_cvTipsInterval.FloatValue, Timer_Tips, _, TIMER_REPEAT);
     
     EnsureETF2LWhitelist();
+    
+    // Initialize health regen values
+    g_iRegenHP = GetConVarInt(g_hRegenHP);
+    g_fRegenTick = GetConVarFloat(g_hRegenTick);
+    g_fRegenDelay = GetConVarFloat(g_hRegenDelay);
+    g_bKillStartRegen = GetConVarBool(g_hKillStartRegen);
+    
+    // Hook ConVar changes to update values
+    HookConVarChange(g_hRegenHP, OnRegenConVarChanged);
+    HookConVarChange(g_hRegenTick, OnRegenConVarChanged);
+    HookConVarChange(g_hRegenDelay, OnRegenConVarChanged);
+    HookConVarChange(g_hKillStartRegen, OnRegenConVarChanged);
+    
+    // Initialize regen timer array
+    for (int i = 0; i <= MaxClients; i++) {
+        g_hRegenTimer[i] = INVALID_HANDLE;
+        g_bRegen[i] = false;
+        g_iMaxHealth[i] = 0;
+    }
+    
+    // Start recent damage tracking timer
+    g_hRecentDamageTimer = CreateTimer(1.0, Timer_RecentDamage, _, TIMER_REPEAT);
+    
+    // Check for updates on plugin start
+    CreateTimer(5.0, Timer_CheckUpdates);
 }
 
 public void OnMapStart() {
@@ -149,6 +205,16 @@ public void OnMapStart() {
     KillTimerSafely(g_hHudTimer);
     KillTimerSafely(g_hGraceTimer);
     KillTimerSafely(g_hVoteTimer);
+    KillTimerSafely(g_hCountdownTimer);
+    KillTimerSafely(g_hTipsTimer);
+    
+    // Reset all regen timers and damage tracking
+    ResetAllPlayersRegen();
+    
+    // Reset max health tracking
+    for (int i = 1; i <= MaxClients; i++) {
+        g_iMaxHealth[i] = 0;
+    }
     
     if (g_hRedSpawns != null) {
         delete g_hRedSpawns;
@@ -226,6 +292,9 @@ public void OnClientDisconnect(int client) {
     
     // Reset movement flag
     g_bPlayerMoved[client] = false;
+    
+    // Stop regen for disconnected player
+    StopRegen(client);
     
     g_bPlayerLocked[client] = false;
     g_bPlayerPicked[client] = false;
@@ -706,13 +775,13 @@ void RemovePlayer(int captain, int target) {
     int redCount, bluCount;
     GetTeamSizes(redCount, bluCount);
     
-    if (redCount == 6 && bluCount == 6) {
+    if (redCount == TEAM_SIZE && bluCount == TEAM_SIZE) {
         StartCountdown();
         return;
     }
     
     if (g_iPicksRemaining <= 0) {
-        PrintToChatAll("\x01[Mix] \x03Cannot end draft! Teams must have exactly 6 players each.");
+        PrintToChatAll("\x01[Mix] \x03Cannot end draft! Teams must have exactly %d players each.", TEAM_SIZE);
         g_iPicksRemaining = 1; // Keep draft going
         return;
     }
@@ -803,13 +872,13 @@ public void PickPlayer(int captain, int target) {
         return;
     }
     
-    int team = view_as<TFTeam>(GetClientTeam(captain));
+    int team = GetClientTeam(captain);
     
     // Check if captain's team is already full (6 players)
     int redCount, bluCount;
     GetTeamSizes(redCount, bluCount);
     
-    if ((team == 2 && redCount >= 6) || (team == 3 && bluCount >= 6)) {
+    if ((team == 2 && redCount >= TEAM_SIZE) || (team == 3 && bluCount >= TEAM_SIZE)) {
         ReplyToCommand(captain, "\x01[Mix] \x03Your team is already full! Use !remove to make space first.");
         return;
     }
@@ -825,13 +894,13 @@ public void PickPlayer(int captain, int target) {
     // Check if teams are now complete
     GetTeamSizes(redCount, bluCount);
     
-    if (redCount == 6 && bluCount == 6) {
+    if (redCount == TEAM_SIZE && bluCount == TEAM_SIZE) {
         StartCountdown();
         return;
     }
     
     if (g_iPicksRemaining <= 0) {
-        PrintToChatAll("\x01[Mix] \x03Cannot end draft! Teams must have exactly 6 players each.");
+        PrintToChatAll("\x01[Mix] \x03Cannot end draft! Teams must have exactly %d players each.", TEAM_SIZE);
         g_iPicksRemaining = 1; // Keep draft going
         return;
     }
@@ -857,6 +926,7 @@ public void EndDraft() {
     
     KillTimerSafely(g_hPickTimer);
     KillTimerSafely(g_hVoteTimer);
+    KillTimerSafely(g_hCountdownTimer);
     StopCountdown();
     
     for (int i = 1; i <= MaxClients; i++) {
@@ -877,6 +947,9 @@ public void EndDraft() {
     }
     
     g_bPreGameDMActive = false;
+    
+    // Stop all health regen when live game starts
+    ResetAllPlayersRegen();
     
     // Clear hint text for all players
     for (int i = 1; i <= MaxClients; i++) {
@@ -992,6 +1065,14 @@ public Action Event_PlayerSpawn(Event event, const char[] name, bool dontBroadca
         if (prot > 0.0) {
             TF2_AddCondition(client, TFCond_UberchargedHidden, prot);
         }
+        
+        // Store max health for regen system
+        g_iMaxHealth[client] = GetClientHealth(client);
+        
+        // Start health regen after spawn protection - only if enabled
+        if (g_iRegenHP > 0) {
+            CreateTimer(prot, StartRegen, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
+        }
     }
         
     if ((client == g_iCaptain1 || client == g_iCaptain2) && !StrContains(g_sOriginalNames[client], "[CAP]")) {
@@ -1044,10 +1125,21 @@ public Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadca
         int attacker = GetClientOfUserId(event.GetInt("attacker"));
         if (IsValidClient(attacker) && attacker != client) {
             TF2_RegeneratePlayer(attacker);
+            
+            // Store max health for regen system
+            g_iMaxHealth[attacker] = GetClientHealth(attacker);
+            
+            // Start regen immediately after kill if enabled
+            if (g_bKillStartRegen && g_iRegenHP > 0) {
+                CreateTimer(0.1, StartRegen, GetClientUserId(attacker), TIMER_FLAG_NO_MAPCHANGE);
+            }
         }
         
         // Reset movement flag for respawn
         g_bPlayerMoved[client] = false;
+        
+        // Stop regen for dead player
+        StopRegen(client);
     }
         
     if (g_bMixInProgress && g_bPlayerLocked[client]) {
@@ -1060,12 +1152,55 @@ public Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadca
     return Plugin_Continue;
 }
 
-
-public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon, int &subtype, int &cmdnum, int &tickcount, int &seed, int mouse[2]) {
-    if (!IsValidClient(client) || !IsPlayerAlive(client)) {
+public Action Event_PlayerHurt(Event event, const char[] name, bool dontBroadcast) {
+    int victim = GetClientOfUserId(event.GetInt("userid"));
+    int attacker = GetClientOfUserId(event.GetInt("attacker"));
+    
+    if (!IsValidClient(victim)) {
         return Plugin_Continue;
     }
     
+    // Skip if attacker is world/environment (fall damage, etc.)
+    if (attacker == 0) {
+        return Plugin_Continue;
+    }
+    
+    // Allow self-damage for regen purposes
+    if (!IsValidClient(attacker) && attacker != victim) {
+        return Plugin_Continue;
+    }
+    
+    // Only track damage during pre-game DM phase
+    if (!g_bPreGameDMActive || !GetConVarBool(g_cvPreGameEnable)) {
+    return Plugin_Continue;
+}
+
+    // Don't process regen if disabled
+    if (g_iRegenHP <= 0) {
+    return Plugin_Continue;
+}
+
+    int damage = event.GetInt("damageamount");
+    
+    // Track recent damage for regen system
+    g_iRecentDamage[attacker][victim][RECENT_DAMAGE_SECONDS - 1] += damage;
+    
+    // Stop regen for victim when they take damage
+    StopRegen(victim);
+    
+    // Start regen after delay
+    if (g_iRegenHP > 0) {
+        CreateTimer(g_fRegenDelay, StartRegen, GetClientUserId(victim), TIMER_FLAG_NO_MAPCHANGE);
+    }
+    
+    return Plugin_Continue;
+}
+
+public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon, int &subtype, int &cmdnum, int &tickcount, int &seed, int mouse[2]) {
+    if (!IsValidClient(client) || !IsPlayerAlive(client)) {
+    return Plugin_Continue;
+}
+
     // Check if player is in DM and hasn't moved yet
     if (g_bPreGameDMActive && !g_bPlayerMoved[client]) {
         // Check for movement (WASD keys) - only trigger once
@@ -1102,6 +1237,7 @@ public Action Event_RoundStart(Event event, const char[] name, bool dontBroadcas
     KillTimerSafely(g_hPickTimer);
     KillTimerSafely(g_hGraceTimer);
     KillTimerSafely(g_hVoteTimer);
+    KillTimerSafely(g_hCountdownTimer);
     
     // Restart HUD timer
     KillTimerSafely(g_hHudTimer);
@@ -1275,8 +1411,8 @@ void UpdateHUDForAll() {
             int redTeamSize, bluTeamSize;
             GetTeamSizes(redTeamSize, bluTeamSize);
             
-            Format(buffer, sizeof(buffer), "DRAFT IN PROGRESS\n%s's turn to pick\nTime: %.0fs\nRED: %d/6 | BLU: %d/6", 
-                   captainName, timeLeft, redTeamSize, bluTeamSize);
+            Format(buffer, sizeof(buffer), "DRAFT IN PROGRESS\n%s's turn to pick\nTime: %.0fs\nRED: %d/%d | BLU: %d/%d", 
+                   captainName, timeLeft, redTeamSize, TEAM_SIZE, bluTeamSize, TEAM_SIZE);
         }
         else if (g_bCountdownActive) {
             Format(buffer, sizeof(buffer), "GAME STARTING IN %d SECONDS...", g_iCountdownSeconds);
@@ -1324,34 +1460,9 @@ public Action Timer_Tips(Handle timer) {
         }
     }
     
-    if (g_hTipsTimer != INVALID_HANDLE) {
-        KillTimer(g_hTipsTimer);
-    }
-    g_hTipsTimer = CreateTimer(g_cvTipsInterval.FloatValue, Timer_Tips, _, TIMER_REPEAT);
-    return Plugin_Stop;
-}
-
-public Action Timer_PickTime(Handle timer) {
-    if (!g_bMixInProgress || g_iMissingCaptain != -1) {
         return Plugin_Continue;
     }
     
-    float currentTime = GetGameTime();
-    float timeLeft = g_cvPickTimeout.FloatValue - (currentTime - g_fPickTimerStartTime);
-    
-    if (timeLeft <= 0.0) {
-        int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
-        int nextPlayer = FindNextAvailablePlayer();
-        
-        if (nextPlayer != -1) {
-            PickPlayer(currentCaptain, nextPlayer);
-        } else {
-            EndDraft();
-        }
-    }
-    
-    return Plugin_Continue;
-}
 
 public Action Timer_GracePeriod(Handle timer) {
     if (!g_bMixInProgress || g_iMissingCaptain == -1) {
@@ -1411,7 +1522,7 @@ void ResumeDraft() {
     g_iMissingCaptain = -1;
     
     g_fPickTimerStartTime = GetGameTime();
-    g_hPickTimer = CreateTimer(1.0, Timer_PickTime, _, TIMER_REPEAT);
+    g_hPickTimer = CreateTimer(1.0, Timer_PickTimeout, _, TIMER_REPEAT);
     
     KillTimerSafely(g_hHudTimer);
     g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
@@ -1652,6 +1763,8 @@ void KillAllTimers() {
     KillTimerSafely(g_hGraceTimer);
     KillTimerSafely(g_hHudTimer);
     KillTimerSafely(g_hVoteTimer);
+    KillTimerSafely(g_hCountdownTimer);
+    KillTimerSafely(g_hTipsTimer);
 }
 
 void ResetAllTimers() {
@@ -1660,6 +1773,8 @@ void ResetAllTimers() {
     g_hGraceTimer = INVALID_HANDLE;
     g_hHudTimer = INVALID_HANDLE;
     g_hVoteTimer = INVALID_HANDLE;
+    g_hCountdownTimer = INVALID_HANDLE;
+    g_hTipsTimer = INVALID_HANDLE;
 }
 
 // Team management functions
@@ -1849,7 +1964,7 @@ public Action Command_AdminPick(int client, int args) {
         return Plugin_Handled;
     }
     
-    int team = view_as<TFTeam>(GetClientTeam(currentCaptain));
+    int team = GetClientTeam(currentCaptain);
     TF2_ChangeClientTeam(targetClient, view_as<TFTeam>(team));
     g_bPlayerLocked[targetClient] = true;
     
@@ -1926,12 +2041,27 @@ public Action Timer_PickTimeout(Handle timer) {
     GetTeamSizes(redCount, bluCount);
     int captainTeam = GetClientTeam(currentCaptain);
     
-    if ((captainTeam == 2 && redCount >= 6) || (captainTeam == 3 && bluCount >= 6)) {
-        // Captain's team is full, skip to next captain
+    // Check if both teams are full (should end draft)
+    if (redCount >= TEAM_SIZE && bluCount >= TEAM_SIZE) {
+        PrintToChatAll("\x01[Mix] \x03Both teams are full! Ending draft.");
+        EndDraft();
+        return Plugin_Stop;
+    }
+    
+    // Check if current captain's team is full, skip to next captain
+    if ((captainTeam == 2 && redCount >= TEAM_SIZE) || (captainTeam == 3 && bluCount >= TEAM_SIZE)) {
         g_iCurrentPicker = (g_iCurrentPicker == 0) ? 1 : 0;
         int nextCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
         
         if (IsValidClient(nextCaptain)) {
+            int nextCaptainTeam = GetClientTeam(nextCaptain);
+            // Check if next captain's team is also full
+            if ((nextCaptainTeam == 2 && redCount >= TEAM_SIZE) || (nextCaptainTeam == 3 && bluCount >= TEAM_SIZE)) {
+                PrintToChatAll("\x01[Mix] \x03Both teams are full! Ending draft.");
+                EndDraft();
+    return Plugin_Stop;
+}
+
             PrintToChatAll("\x01[Mix] \x03%N's team is full! Skipping to %N's turn.", currentCaptain, nextCaptain);
             CreateTimer(0.5, Timer_OpenDraftMenu, GetClientUserId(nextCaptain));
             
@@ -1939,7 +2069,7 @@ public Action Timer_PickTimeout(Handle timer) {
             g_hPickTimer = CreateTimer(g_cvPickTimeout.FloatValue, Timer_PickTimeout);
             g_fPickTimerStartTime = GetGameTime();
         } else {
-            PrintToChatAll("\x01[Mix] \x03Both teams are full! Ending draft.");
+            PrintToChatAll("\x01[Mix] \x03Cannot continue draft - invalid captain.");
             EndDraft();
         }
         return Plugin_Stop;
@@ -1964,8 +2094,8 @@ public Action Timer_StartDraftAfterTournament(Handle timer) {
         return Plugin_Stop;
     }
     
-    int team1 = GetRandomInt(TFTeam_Red, TFTeam_Blue);
-    int team2 = (view_as<TFTeam>(team1) == TFTeam_Red) ? TFTeam_Blue : TFTeam_Red;
+    int team1 = GetRandomInt(2, 3); // 2 = Red, 3 = Blue
+    int team2 = (team1 == 2) ? 3 : 2;
     
     MovePlayerToTeam(g_iCaptain1, view_as<TFTeam>(team1));
     MovePlayerToTeam(g_iCaptain2, view_as<TFTeam>(team2));
@@ -1977,7 +2107,7 @@ public Action Timer_StartDraftAfterTournament(Handle timer) {
     }
     
     g_fPickTimerStartTime = GetGameTime();
-    g_hPickTimer = CreateTimer(1.0, Timer_PickTime, _, TIMER_REPEAT);
+    g_hPickTimer = CreateTimer(g_cvPickTimeout.FloatValue, Timer_PickTimeout);
     g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
     
     PrintToChatAll("\x01[Mix] \x03Draft has started! First captain's turn to pick.");
@@ -2225,7 +2355,7 @@ void ApplyETF2LMapSettingsForCurrentMap() {
 
 
 void LoadSpawnPoints() {
-    // SOAP TF2DM spawn system - exact copy
+    // Random spawn system - exact copy
     g_bSpawnRandom = GetConVarBool(g_hSpawnRandom);
     g_bTeamSpawnRandom = GetConVarBool(g_hTeamSpawnRandom);
     
@@ -2307,7 +2437,7 @@ void LoadSpawnsFromConfig() {
 }
 
 void LoadDefaultSpawns() {
-    // SOAP TF2DM default spawn loading - exact copy
+    // Default spawn loading
     int ent = -1;
     while ((ent = FindEntityByClassname(ent, "info_player_teamspawn")) > 0) {
         if (!IsValidEntity(ent)) continue;
@@ -2356,7 +2486,7 @@ bool StringToVector(const char[] str, float vec[3]) {
 }
 
 bool GetSpawnPoint(int client, float origin[3]) {
-    // SOAP TF2DM spawn point selection - exact copy
+    // Spawn point selection
     if (!g_bSpawnRandom) {
         return false;
     }
@@ -2452,7 +2582,7 @@ void StartCountdown() {
     
     // Ensure HUD timer is running for countdown display
     if (g_hHudTimer == INVALID_HANDLE) {
-        g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
+    g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
     }
     
     PrintToChatAll("\x01[Mix] \x03Teams are complete! Game starting in 10 seconds...");
@@ -2487,7 +2617,7 @@ public Action Timer_Countdown(Handle timer) {
 
 public Action Timer_ShowInfoCard(Handle timer) {
 PrintToServer("+----------------------------------------------+");
-PrintToServer("|               TF2-Mixes v0.2.0               |");
+PrintToServer("|               TF2-Mixes v0.2.1               |");
 PrintToServer("|     vexx-sm | Type !helpmix for commands     |");
 PrintToServer("+----------------------------------------------+");
     return Plugin_Stop;
@@ -2506,6 +2636,7 @@ void ShowHelpMenu(int client) {
     PrintToChat(client, "\x01[Mix] \x07FF0000!autodraft \x07FFFFFF- Auto-draft remaining players");
     PrintToChat(client, "\x01[Mix] \x07FF0000!outline \x07FFFFFF- Toggle teammate outlines for all players");
     PrintToChat(client, "\x01[Mix] \x07FF0000!cancelmix \x07FFFFFF- Cancel current mix");
+    PrintToChat(client, "\x01[Mix] \x07FF0000!updatemix \x07FFFFFF- Check for and download plugin updates");
 }
 
 public Action Command_ToggleOutlines(int client, int args) {
@@ -2537,14 +2668,547 @@ void ToggleTeamOutlines(bool enabled) {
     }
 }
 
+// ========================================
+// HEALTH REGENERATION SYSTEM
+// ========================================
 
+public Action StartRegen(Handle timer, any userid) {
+    int client = GetClientOfUserId(userid);
+    
+    if (!IsValidClient(client) || !IsPlayerAlive(client)) {
+        return Plugin_Stop;
+    }
+    
+    // Only enable regen during pre-game DM phase
+    if (!g_bPreGameDMActive || !GetConVarBool(g_cvPreGameEnable)) {
+        return Plugin_Stop;
+    }
+    
+    // Don't start regen if disabled
+    if (g_iRegenHP <= 0) {
+        return Plugin_Stop;
+    }
+    
+    if (g_bRegen[client]) {
+        return Plugin_Stop; // Already regenerating
+    }
+    
+    g_bRegen[client] = true;
+    g_hRegenTimer[client] = CreateTimer(g_fRegenTick, Timer_RegenTick, GetClientUserId(client), TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+    
+    return Plugin_Stop;
+}
+
+void StopRegen(int client) {
+    if (g_hRegenTimer[client] != INVALID_HANDLE) {
+        KillTimer(g_hRegenTimer[client]);
+        g_hRegenTimer[client] = INVALID_HANDLE;
+    }
+    g_bRegen[client] = false;
+}
+
+public Action Timer_RegenTick(Handle timer, any userid) {
+    int client = GetClientOfUserId(userid);
+    
+    if (!IsValidClient(client) || !IsPlayerAlive(client)) {
+        StopRegen(client);
+        return Plugin_Stop;
+    }
+    
+    // Only regen during pre-game DM phase
+    if (!g_bPreGameDMActive || !GetConVarBool(g_cvPreGameEnable)) {
+        StopRegen(client);
+        return Plugin_Stop;
+    }
+    
+    // Stop regen if disabled
+    if (g_iRegenHP <= 0) {
+        StopRegen(client);
+        return Plugin_Stop;
+    }
+    
+    int currentHealth = GetClientHealth(client);
+    int maxHealth = g_iMaxHealth[client];
+    
+    if (maxHealth <= 0) {
+        maxHealth = currentHealth;
+        g_iMaxHealth[client] = maxHealth;
+    }
+    
+    if (currentHealth < maxHealth) {
+        int newHealth = currentHealth + g_iRegenHP;
+        if (newHealth > maxHealth) {
+            newHealth = maxHealth;
+        }
+        SetEntityHealth(client, newHealth);
+    }
+    
+    return Plugin_Continue;
+}
+
+public void OnRegenConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue) {
+    // Update regen values when ConVars change
+    g_iRegenHP = GetConVarInt(g_hRegenHP);
+    g_fRegenTick = GetConVarFloat(g_hRegenTick);
+    g_fRegenDelay = GetConVarFloat(g_hRegenDelay);
+    g_bKillStartRegen = GetConVarBool(g_hKillStartRegen);
+}
+
+void ResetPlayerDmgBasedRegen(int client, bool alsoResetTaken = false) {
+    for (int player = 1; player <= MaxClients; player++) {
+        for (int i = 0; i < RECENT_DAMAGE_SECONDS; i++) {
+            g_iRecentDamage[player][client][i] = 0;
+        }
+    }
+    
+    if (alsoResetTaken) {
+        for (int player = 1; player <= MaxClients; player++) {
+            for (int i = 0; i < RECENT_DAMAGE_SECONDS; i++) {
+                g_iRecentDamage[client][player][i] = 0;
+            }
+        }
+    }
+}
+
+void ResetAllPlayersRegen() {
+    for (int i = 1; i <= MaxClients; i++) {
+        if (IsValidClient(i)) {
+            StopRegen(i);
+            ResetPlayerDmgBasedRegen(i);
+        }
+        // Also reset for all possible client indices
+        g_bRegen[i] = false;
+        g_iMaxHealth[i] = 0;
+    }
+}
+
+public Action Timer_RecentDamage(Handle timer) {
+    // Shift damage array left by 1 second
+    for (int attacker = 1; attacker <= MaxClients; attacker++) {
+        for (int victim = 1; victim <= MaxClients; victim++) {
+            for (int i = 0; i < RECENT_DAMAGE_SECONDS - 1; i++) {
+                g_iRecentDamage[attacker][victim][i] = g_iRecentDamage[attacker][victim][i + 1];
+            }
+            g_iRecentDamage[attacker][victim][RECENT_DAMAGE_SECONDS - 1] = 0;
+        }
+    }
+    return Plugin_Continue;
+}
+
+
+
+
+// ========================================
+// MIX UPDATE SYSTEM
+// ========================================
+
+// Update system variables
+char g_sCurrentVersion[32] = "0.2.1";
+char g_sLatestVersion[32];
+char g_sUpdateURL[256];
+bool g_bUpdateAvailable = false;
+Handle g_hNotificationTimer = INVALID_HANDLE;
+
+// Extension detection - SteamWorks is installed by default
+#define STEAMWORKS_AVAILABLE() (GetFeatureStatus(FeatureType_Native, "SteamWorks_CreateHTTPRequest") == FeatureStatus_Available)
+
+// Update system functions
+public Action Timer_CheckUpdates(Handle timer) {
+    CheckForUpdates();
+    return Plugin_Stop;
+}
+
+void CheckForUpdates() {
+    // Check if SteamWorks is available (installed by default)
+    if (!STEAMWORKS_AVAILABLE()) {
+        LogMessage("[Mix] SteamWorks not available - update system disabled");
+        return;
+    }
+    
+    // Create HTTP request to GitHub API
+    Handle hRequest = SteamWorks_CreateHTTPRequest(k_EHTTPMethodGET, "https://api.github.com/repos/vexx-sm/TF2-Mixes/releases/latest");
+    if (hRequest == INVALID_HANDLE) {
+        LogError("[Mix] Failed to create HTTP request");
+        return;
+    }
+    
+    // Set headers
+    SteamWorks_SetHTTPRequestHeaderValue(hRequest, "User-Agent", "TF2-Mixes-Plugin");
+    SteamWorks_SetHTTPRequestHeaderValue(hRequest, "Accept", "application/vnd.github.v3+json");
+    
+    // Set callbacks
+    SteamWorks_SetHTTPCallbacks(hRequest, OnUpdateCheck, INVALID_FUNCTION, INVALID_FUNCTION);
+    
+    // Send request
+    if (!SteamWorks_SendHTTPRequest(hRequest)) {
+        LogError("[Mix] Failed to send HTTP request");
+        delete hRequest;
+    }
+}
+
+public void OnUpdateCheck(Handle hRequest, bool bFailure, bool bRequestSuccessful, EHTTPStatusCode eStatusCode) {
+    if (bFailure || !bRequestSuccessful) {
+        LogError("[Mix] HTTP request failed");
+        delete hRequest;
+        return;
+    }
+    
+    if (eStatusCode != k_EHTTPStatusCode200OK) {
+        LogError("[Mix] HTTP request failed with status: %d", eStatusCode);
+        delete hRequest;
+        return;
+    }
+    
+    // Get response body size
+    int bodySize;
+    if (!SteamWorks_GetHTTPResponseBodySize(hRequest, bodySize)) {
+        LogError("[Mix] Failed to get response body size");
+        delete hRequest;
+        return;
+    }
+    
+    // Get response body (use static buffer to avoid heap issues)
+    char responseBody[8192]; // 8KB should be enough for GitHub API response
+    int readSize = (bodySize > sizeof(responseBody) - 1) ? sizeof(responseBody) - 1 : bodySize;
+    
+    if (!SteamWorks_GetHTTPResponseBodyData(hRequest, responseBody, readSize)) {
+        LogError("[Mix] Failed to get response body");
+        delete hRequest;
+        return;
+    }
+    
+    responseBody[readSize] = '\0'; // Ensure null termination
+    
+    // Parse JSON response
+    
+    delete hRequest;
+    
+    // Parse JSON response
+    ParseGitHubResponse(responseBody);
+}
+
+void ParseGitHubResponse(const char[] response) {
+    // Simple JSON parsing for GitHub API response
+    char tagName[64];
+    char downloadUrl[256];
+    
+    // Extract tag_name
+    int tagStart = StrContains(response, "\"tag_name\":\"");
+    if (tagStart != -1) {
+        tagStart += 12; // Skip "tag_name":"
+        int tagEnd = StrContains(response[tagStart], "\"");
+        if (tagEnd != -1) {
+            strcopy(tagName, sizeof(tagName), response[tagStart]);
+            tagName[tagEnd] = '\0';
+        }
+    }
+    
+    // Extract browser_download_url from first asset
+    int urlStart = StrContains(response, "\"browser_download_url\":\"");
+    if (urlStart != -1) {
+        urlStart += 25; // Skip "browser_download_url":"
+        int urlEnd = StrContains(response[urlStart], "\"");
+        if (urlEnd != -1) {
+            strcopy(downloadUrl, sizeof(downloadUrl), response[urlStart]);
+            downloadUrl[urlEnd] = '\0';
+        }
+    }
+    
+    if (strlen(tagName) == 0) {
+        LogError("[Mix] Could not find tag_name in response");
+        return;
+    }
+    
+    // Remove 'v' prefix if present
+    if (tagName[0] == 'v') {
+        strcopy(g_sLatestVersion, sizeof(g_sLatestVersion), tagName[1]);
+    } else {
+        strcopy(g_sLatestVersion, sizeof(g_sLatestVersion), tagName);
+    }
+    
+    // Compare versions using semantic versioning
+    if (CompareVersions(g_sCurrentVersion, g_sLatestVersion) >= 0) {
+        return; // Plugin is up to date
+    }
+    
+    if (strlen(downloadUrl) == 0) {
+        LogError("[Mix] No download URL found in response");
+        return;
+    }
+    
+    strcopy(g_sUpdateURL, sizeof(g_sUpdateURL), downloadUrl);
+    g_bUpdateAvailable = true;
+    StartUpdateNotifications();
+    LogMessage("[Mix] Update available: v%s -> v%s | Use 'sm_updatemix' to download and install", g_sCurrentVersion, g_sLatestVersion);
+}
+
+void StartUpdateNotifications() {
+    if (g_hNotificationTimer != INVALID_HANDLE) {
+        KillTimer(g_hNotificationTimer);
+    }
+    
+    g_hNotificationTimer = CreateTimer(160.0, Timer_NotifyAdmins, _, TIMER_REPEAT);
+    NotifyAdminsOfUpdate();
+}
+
+void NotifyAdminsOfUpdate() {
+    for (int i = 1; i <= MaxClients; i++) {
+        if (IsValidClient(i) && CheckCommandAccess(i, "sm_updatemix", ADMFLAG_ROOT)) {
+            PrintToChat(i, "\x01[Mix] \x03Update available: v%s -> v%s", g_sCurrentVersion, g_sLatestVersion);
+            PrintToChat(i, "\x01[Mix] \x03Use \x0700FF00!updatemix \x03to download and install");
+        }
+    }
+}
+
+public Action Timer_NotifyAdmins(Handle timer) {
+    if (!g_bUpdateAvailable) {
+        g_hNotificationTimer = INVALID_HANDLE;
+        return Plugin_Stop;
+    }
+    
+    NotifyAdminsOfUpdate();
+    return Plugin_Continue;
+}
+
+public Action Command_UpdateMix(int client, int args) {
+    if (!CheckCommandAccess(client, "sm_updatemix", ADMFLAG_ROOT)) {
+        ReplyToCommand(client, "\x01[Mix] \x03You do not have permission to use this command!");
+        return Plugin_Handled;
+    }
+    
+    // Check if SteamWorks is available
+    if (!STEAMWORKS_AVAILABLE()) {
+        ReplyToCommand(client, "\x01[Mix] \x03SteamWorks not available - update system disabled");
+        ReplyToCommand(client, "\x01[Mix] \x03SteamWorks should be installed by default with SourceMod");
+        return Plugin_Handled;
+    }
+    
+    if (!g_bUpdateAvailable) {
+        ReplyToCommand(client, "\x01[Mix] \x03No updates available. Current version: v%s", g_sCurrentVersion);
+        return Plugin_Handled;
+    }
+    
+    PrintToChat(client, "\x01[Mix] \x03Downloading update...");
+    LogMessage("[Mix] Update initiated by admin %N", client);
+    
+    // Create HTTP request to download the update
+    Handle hRequest = SteamWorks_CreateHTTPRequest(k_EHTTPMethodGET, g_sUpdateURL);
+    if (hRequest == INVALID_HANDLE) {
+        LogError("[Mix] Failed to create download request");
+        ReplyToCommand(client, "\x01[Mix] \x03Failed to create download request");
+        return Plugin_Handled;
+    }
+    
+    // Set headers
+    SteamWorks_SetHTTPRequestHeaderValue(hRequest, "User-Agent", "TF2-Mixes-Plugin");
+    
+    // Set callbacks
+    SteamWorks_SetHTTPCallbacks(hRequest, OnUpdateDownload, INVALID_FUNCTION, INVALID_FUNCTION);
+    
+    // Send request
+    if (!SteamWorks_SendHTTPRequest(hRequest)) {
+        LogError("[Mix] Failed to send download request");
+        ReplyToCommand(client, "\x01[Mix] \x03Failed to send download request");
+        delete hRequest;
+    }
+    
+    return Plugin_Handled;
+}
+
+public void OnUpdateDownload(Handle hRequest, bool bFailure, bool bRequestSuccessful, EHTTPStatusCode eStatusCode) {
+    if (bFailure || !bRequestSuccessful) {
+        LogError("[Mix] Download request failed");
+        NotifyAdminsOfError("Download request failed");
+        delete hRequest;
+        return;
+    }
+    
+    if (eStatusCode != k_EHTTPStatusCode200OK) {
+        LogError("[Mix] Download failed with status: %d", eStatusCode);
+        NotifyAdminsOfError("Download failed - invalid status code");
+        delete hRequest;
+        return;
+    }
+    
+    // Get response body size
+    int bodySize;
+    if (!SteamWorks_GetHTTPResponseBodySize(hRequest, bodySize)) {
+        LogError("[Mix] Failed to get download body size");
+        NotifyAdminsOfError("Failed to get download size");
+        delete hRequest;
+        return;
+    }
+    
+    // Write to file
+    char filepath[256] = "addons/sourcemod/plugins/mixes_update.smx";
+    if (!SteamWorks_WriteHTTPResponseBodyToFile(hRequest, filepath)) {
+        LogError("[Mix] Failed to write download to file");
+        NotifyAdminsOfError("Failed to write download to file");
+        delete hRequest;
+        return;
+    }
+    
+    delete hRequest;
+    
+    // Validate and apply update
+    if (ValidateUpdateFile(filepath)) {
+        ApplyUpdate();
+    } else {
+        LogError("[Mix] Downloaded file validation failed");
+        NotifyAdminsOfError("File validation failed");
+        DeleteFile(filepath);
+    }
+}
+
+bool ValidateUpdateFile(const char[] filepath) {
+    if (!FileExists(filepath)) {
+        LogError("[Mix] Update file does not exist: %s", filepath);
+        return false;
+    }
+    
+    // Simple validation - just check if file exists and is readable
+    File file = OpenFile(filepath, "rb");
+    if (file == null) {
+        LogError("[Mix] Cannot open update file: %s", filepath);
+        return false;
+    }
+    
+    delete file;
+    LogMessage("[Mix] Update file validated: %s", filepath);
+    return true;
+}
+
+void ApplyUpdate() {
+    char currentFile[256] = "addons/sourcemod/plugins/mixes.smx";
+    char updateFile[256] = "addons/sourcemod/plugins/mixes_update.smx";
+    
+    // No backup needed - direct replacement
+    
+    // Replace current plugin with new version
+    if (File_Copy(updateFile, currentFile)) {
+        // Clean up the update file
+        DeleteFile(updateFile);
+        
+        PrintToChatAll("\x01[Mix] \x03Update downloaded and applied successfully! Reloading plugin...");
+        LogMessage("[Mix] Update applied successfully, reloading plugin");
+        
+        // Reset flags and stop notifications
+        g_bUpdateAvailable = false;
+        KillTimerSafely(g_hNotificationTimer);
+        
+        // Reload the plugin after a short delay
+        CreateTimer(1.0, Timer_ReloadPlugin);
+    } else {
+        PrintToChatAll("\x01[Mix] \x03Failed to apply update! Check server logs.");
+        LogError("[Mix] Failed to replace current plugin with update");
+    }
+}
+
+bool File_Copy(const char[] source, const char[] destination) {
+    File src = OpenFile(source, "rb");
+    if (src == null) return false;
+    
+    File dst = OpenFile(destination, "wb");
+    if (dst == null) {
+        delete src;
+        return false;
+    }
+    
+    int buffer[1024];
+    int bytesRead;
+    
+    while ((bytesRead = src.Read(buffer, sizeof(buffer), 1)) > 0) {
+        dst.Write(buffer, bytesRead, 1);
+    }
+    
+    delete src;
+    delete dst;
+    return true;
+}
+
+public Action Timer_ReloadPlugin(Handle timer) {
+    // Reload the plugin to load the new version
+    ServerCommand("sm plugins reload mixes");
+    return Plugin_Stop;
+}
+
+void NotifyAdminsOfError(const char[] error) {
+    for (int i = 1; i <= MaxClients; i++) {
+        if (IsValidClient(i) && CheckCommandAccess(i, "sm_updatemix", ADMFLAG_ROOT)) {
+            PrintToChat(i, "\x01[Mix] \x03Update error: %s", error);
+        }
+    }
+}
+
+int CompareVersions(const char[] version1, const char[] version2) {
+    // Handle semantic version comparison (major.minor.patch.build)
+    int v1[4], v2[4];
+    
+    // Parse version1
+    char parts1[4][16];
+    int count1 = ExplodeString(version1, ".", parts1, sizeof(parts1), sizeof(parts1[]));
+    for (int i = 0; i < 4; i++) {
+        v1[i] = (i < count1) ? StringToInt(parts1[i]) : 0;
+    }
+    
+    // Parse version2
+    char parts2[4][16];
+    int count2 = ExplodeString(version2, ".", parts2, sizeof(parts2), sizeof(parts2[]));
+    for (int i = 0; i < 4; i++) {
+        v2[i] = (i < count2) ? StringToInt(parts2[i]) : 0;
+    }
+    
+    // Compare major.minor.patch.build
+    for (int i = 0; i < 4; i++) {
+        if (v1[i] > v2[i]) return 1;   // version1 is newer
+        if (v1[i] < v2[i]) return -1;  // version1 is older
+    }
+    
+    return 0; // versions are equal
+}
+
+public Action Command_MixVersion(int client, int args) {
+    if (!IsValidClient(client)) return Plugin_Handled;
+    
+    ReplyToCommand(client, "\x01[Mix] \x03Current version: v%s", g_sCurrentVersion);
+    
+    // Check if SteamWorks is available
+    if (!STEAMWORKS_AVAILABLE()) {
+        ReplyToCommand(client, "\x01[Mix] \x03Auto-update disabled - SteamWorks not available");
+        ReplyToCommand(client, "\x01[Mix] \x03SteamWorks should be installed by default with SourceMod");
+    } else {
+        ReplyToCommand(client, "\x01[Mix] \x03Auto-update system ready (SteamWorks available)");
+    }
+    
+    return Plugin_Handled;
+}
+
+// ========================================
+// END MIX UPDATE SYSTEM
+// ========================================
 
 public void OnPluginEnd() {
+    // Clean up all timers
+    KillTimerSafely(g_hPickTimer);
+    KillTimerSafely(g_hHudTimer);
+    KillTimerSafely(g_hTipsTimer);
+    KillTimerSafely(g_hGraceTimer);
+    KillTimerSafely(g_hVoteTimer);
+    KillTimerSafely(g_hCountdownTimer);
+    KillTimerSafely(g_hNotificationTimer);
+    
+    // Clean up health regen system
+    KillTimerSafely(g_hRecentDamageTimer);
+    ResetAllPlayersRegen();
+    
     // Clean up spawn point arrays
     if (g_hRedSpawns != null) {
         delete g_hRedSpawns;
     }
     if (g_hBluSpawns != null) {
         delete g_hBluSpawns;
+    }
+    if (g_hKv != null) {
+        delete g_hKv;
     }
 }
