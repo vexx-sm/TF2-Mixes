@@ -59,9 +59,10 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 2. Download the latest **`mixes.smx`** from the [Releases](https://github.com/vexx-sm/TF2-Mixes/releases) page.
 3. Place it in your `sourcemod/plugins` folder.
 4. Reload the plugin or restart your server.
-   -**Optional:** 
-   -	`mixes_dm.smx` provides DM features (health regen, random spawns). It's recommended for pre-game DM.
-   -	Download the [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.3.0/configs.zip) and extract to your server.
+   
+   **Optional:** 
+     -	`mixes_dm.smx` provides DM features (health regen, random spawns). It's recommended for pre-game DM.
+     -	Download the [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.3.0/configs.zip) and extract to your server.
 
 ---
 
