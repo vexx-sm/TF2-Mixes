@@ -5,11 +5,6 @@ A SourceMod plugin that sets up a **6v6 competitive mix** where 2 captains pick 
 > [!IMPORTANT]
 > This plugin is in an early stage and currently serves as a base. 12v12 and more is planned.
 
-> [!WARNING]
-> The plugin currently conflicts with [SOAPdm](https://github.com/sapphonie/SOAP-TF2DM) and won't work properly if it's loaded.
-
-https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
-
 
 ## How It Works
 
@@ -33,7 +28,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - Any vote requires **30% of players to initiate**, and passes with **⅔ majority**.  
 
 > [!NOTE]
-> Pre-game DM requires the provided [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.2.1/configs.zip), otherwise random spawns won’t work.
+> Pre-game DM requires the provided [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.3.0/configs.zip), otherwise random spawns won’t work.
 
 
 ## Commands
@@ -43,7 +38,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - `!draft` / `!pick` — Open draft menu (only current captain, during their turn)  
 - `!draft <player>` / `!pick <player>` — Pick a player by name (partial names work)  
 - `!remove` — Remove a player from your team (counts as a turn)  
-- `!restart` / `!redraft` — Start a vote to restart the draft  
+- `!restart` / `!redraft` — Start a vote to restart the draft (requires 2/3 of players to pass )
 - `!helpmix` — Show help menu  
 
 ### Admin Commands
@@ -53,6 +48,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - `!cancelmix` — Cancel the current mix  
 - `!updatemix` — Check for and download plugin updates (auto install and reload)
 - `!outline` — Toggle teammate outlines (to help coordination with no comms)
+- `!rup` - Force both teams ready
 
 <img width="892" height="563" alt="Screenshot_1" src="https://github.com/user-attachments/assets/9a8b8a89-be9e-4b28-9567-3ac7e5d50912" />
 
@@ -62,7 +58,9 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 2. Download the latest **`mixes.smx`** from the [Releases](https://github.com/vexx-sm/TF2-Mixes/releases) page.
 3. Place it in your `sourcemod/plugins` folder.
 4. Reload the plugin or restart your server.
-
+   -**Optional:** 
+   -	`mixes_dm.smx` provides DM features (health regen, random spawns). It's recommended for pre-game DM.
+   -	Download the [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.3.0/configs.zip) and extract to your server.
 
 ---
 
