@@ -51,8 +51,6 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - `!outline` — Toggle teammate outlines (to help coordination with no comms)
 - `!rup` - Force both teams ready
 
-<img width="892" height="563" alt="Screenshot_1" src="https://github.com/user-attachments/assets/9a8b8a89-be9e-4b28-9567-3ac7e5d50912" />
-
 
 ## Installation 
 1. Download the latest **SourceMod** version [here](https://www.sourcemod.net/downloads.php?branch=stable).
