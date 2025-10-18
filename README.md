@@ -55,7 +55,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - `!cancelmix` — Cancel the current mix  
 - `!updatemix` — Check for and download plugin updates (auto install and reload)
 - `!rup` - Force both teams ready
-- `!outline` — Toggle teammate outlines for both teams (to help coordination with no comms)
+- `!outline` — Toggle teammate outlines for both teams
 <p>
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   <img width="521" height="329" alt="Screenshot_1" src="https://github.com/user-attachments/assets/9d89a489-7251-4fe0-8874-38ab7ce853ef" />
