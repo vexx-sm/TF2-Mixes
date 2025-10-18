@@ -17,7 +17,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - Captains are randomly assigned to RED or BLU.  
 
 ### 2. Drafting Phase
-<img align="right" width="308" height="143" alt="Status" src="https://github.com/user-attachments/assets/83262fd7-8ab8-4f1f-bae7-6769ea998560" />
+
 
 - Captains pick players in order (XYXY XYXY XY).  
 - Picked players are auto-moved to their captain’s team.
