@@ -1,5 +1,7 @@
 <h1 align="center">Team Fortress 2 Mixes</h1>
 
+
+
 A SourceMod plugin that sets up a **6v6 competitive mix** where 2 captains pick players in an **XYXY** order. Includes random drafting, votes, and more.
 
 > [!IMPORTANT]
@@ -11,8 +13,9 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 
 ### 1. Setup Phase
 - Players use `!captain` or `!cap` to become (or drop as) a captain.  
-- Once two captains are selected **and at least 12 players are present**, all others are moved to spectator.  
+- Once two captains are selected **and at least 12 players are present**, all others are moved to spectator.
 - Captains are randomly assigned to RED or BLU.  
+<img align="right" width="410" height="190" alt="Status" src="https://github.com/user-attachments/assets/83262fd7-8ab8-4f1f-bae7-6769ea998560" />
 
 ### 2. Drafting Phase
 - Captains pick players in order (XYXY XYXY XY).  
@@ -32,6 +35,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 > Pre-game DM requires the provided [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.3.0/configs.zip), otherwise random spawns won’t work.
 
 
+
 ## Commands
 
 ### Player Commands
@@ -43,6 +47,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - `!helpmix` — Show help menu  
 
 ### Admin Commands
+
 - `!setcaptain <player>` — Set/remove a captain  
 - `!adminpick <player>` — Force pick a player for the current captain  
 - `!autodraft` — Auto-draft remaining players  
@@ -50,7 +55,11 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - `!updatemix` — Check for and download plugin updates (auto install and reload)
 - `!rup` - Force both teams ready
 - `!outline` — Toggle teammate outlines (to help coordination with no comms)
-<img width="892" height="563" alt="Screenshot_1" src="https://github.com/user-attachments/assets/9d89a489-7251-4fe0-8874-38ab7ce853ef" />
+<p>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <img width="521" height="329" alt="Screenshot_1" src="https://github.com/user-attachments/assets/9d89a489-7251-4fe0-8874-38ab7ce853ef" />
+</p>
+
 
 ## Installation 
 1. Download the latest **SourceMod** version [here](https://www.sourcemod.net/downloads.php?branch=stable).
@@ -63,6 +72,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
      -	Random spawns require these [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.3.0/configs.zip), extract in `tf2/tf/addons/sourcemod/configs`.
 
 ---
+
 
 **Requests & Contributions are welcome!**
 
