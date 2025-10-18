@@ -5,9 +5,9 @@
 A SourceMod plugin that sets up a **6v6 competitive mix** where 2 captains pick players in an **XYXY** order. Includes random drafting, votes, and more.
 
 > [!IMPORTANT]
-> This plugin is in an early stage and currently serves as a base. 12v12 and more is planned.
+> This plugin is in an early stage and serves as a base for 6s mixes. 12v12 and more is planned.
 
-https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
+https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
 
 ## How It Works
 
@@ -20,7 +20,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 
 
 - Captains pick players in order (XYXY XYXY XY).  
-- Picked players are auto-moved to their captain’s team.
+- Picked players are auto-moved to their captain's team.
 - Each captain has **30s per turn**; if the timer expires, a random player is picked.  
 - Captains may use `!remove` to drop a player (counts as a turn).  
 - When both teams reach 6v6, a **10s countdown** begins before the game starts.  
@@ -33,18 +33,20 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - Any vote requires **30% of players to initiate**, and passes with **⅔ majority**.  
 
 > [!NOTE]
-> Pre-game DM requires the provided [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.3.0/configs.zip), otherwise random spawns won’t work.
+> Pre-game DM requires the provided [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.3.1/configs.zip), otherwise random spawns won't work.
 
 
 
 ## Commands
+
+> Most commands support multiple aliases for convenience (e.g., `!restart`, `!redraft`, `!reset`)
 
 ### Player Commands
 - `!captain` / `!cap` — Become or drop as captain  
 - `!draft` / `!pick` — Open draft menu (only current captain, during their turn)  
 - `!draft <player>` / `!pick <player>` — Pick a player by name (partial names work)  
 - `!remove` — Remove a player from your team (counts as a turn)  
-- `!restart` / `!redraft` — Start a vote to restart the draft (requires 2/3 of players to pass )
+- `!restart` / `!redraft` — Start a vote to restart the draft (requires 2/3 of players to pass)
 - `!helpmix` — Show help menu  
 
 ### Admin Commands
@@ -54,7 +56,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - `!autodraft` — Auto-draft remaining players  
 - `!cancelmix` — Cancel the current mix  
 - `!updatemix` — Check for and download plugin updates (auto install and reload)
-- `!rup` - Force both teams ready
+- `!rup` — Force both teams ready
 - `!outline` — Toggle teammate outlines for both teams
 <p>
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -70,7 +72,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
    
    **Optional:** 
      -	`mixes_dm.smx` provides DM features (health regen, random spawns). It's recommended for pre-game DM.
-     -	Random spawns require these [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.3.0/configs.zip), extract in `tf2/tf/addons/sourcemod/configs`.
+     -	Random spawns require these [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.3.1/configs.zip), extract in `tf2/tf/addons/sourcemod/configs`.
 
 ---
 
@@ -81,8 +83,7 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 <summary>what next?</summary>
   
 - Configurable team sizes (4v4, 6v6, Highlander)   
-- Improved captain handling (auto-replacement)  
-- Smarter auto-draft and configurable voting  
+- Configurable voting thresholds and options  
 - New admin cmds: `sm_forcestart`, `sm_shuffle`  
 - Better handling of spectators/late-joins  
 - Match QoL: auto-pause and ready-up system  

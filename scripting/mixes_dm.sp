@@ -12,7 +12,7 @@ public Plugin myinfo = {
     name = "TF2-Mixes DM Module",
     author = "vexx-sm",
     description = "DM features for TF2-Mixes plugin",
-    version = "0.3.0",
+    version = "0.3.1",
     url = "https://github.com/vexx-sm/TF2-Mixes"
 };
 
@@ -35,11 +35,6 @@ ConVar g_hRegenTick;
 ConVar g_hRegenDelay;
 ConVar g_hKillStartRegen;
 int g_iMaxHealth[MAXPLAYERS + 1];
-
-// Recent damage tracking for regen
-#define RECENT_DAMAGE_SECONDS 10
-int g_iRecentDamage[MAXPLAYERS + 1][MAXPLAYERS + 1][RECENT_DAMAGE_SECONDS];
-Handle g_hRecentDamageTimer;
 
 // Pre-game DM system
 ConVar g_cvPreGameEnable;
@@ -72,8 +67,7 @@ bool IsValidClient(int client) {
 
 void KillTimerSafely(Handle &timer) {
     if (timer != INVALID_HANDLE) {
-        // Use CloseHandle which is safer for plugin reload scenarios
-        CloseHandle(timer);
+        delete timer;
         timer = INVALID_HANDLE;
     }
 }
@@ -139,24 +133,11 @@ public void OnPluginStart() {
     HookConVarChange(g_hDMStopAll, OnDMStopAllChanged);
     
     // Initialize regen timer array
-    for (int i = 0; i <= MaxClients; i++) {
+    for (int i = 1; i <= MaxClients; i++) {
         g_hRegenTimer[i] = INVALID_HANDLE;
         g_bRegen[i] = false;
         g_iMaxHealth[i] = 0;
     }
-    
-    // Initialize damage tracking array
-    for (int attacker = 0; attacker <= MaxClients; attacker++) {
-        for (int victim = 0; victim <= MaxClients; victim++) {
-            for (int i = 0; i < RECENT_DAMAGE_SECONDS; i++) {
-                g_iRecentDamage[attacker][victim][i] = 0;
-            }
-        }
-    }
-    
-    // Start recent damage tracking timer
-    g_hRecentDamageTimer = INVALID_HANDLE;
-    g_hRecentDamageTimer = CreateTimer(1.0, Timer_RecentDamage, _, TIMER_REPEAT);
 }
 
 public Action Timer_CheckMainPlugin(Handle timer) {
@@ -194,7 +175,8 @@ public void OnMapStart() {
 }
 
 public void OnClientPutInServer(int client) {
-    if (!IsValidClient(client))
+    // Don't use IsValidClient - client may not be fully in-game yet
+    if (client <= 0 || client > MaxClients)
         return;
         
     // Initialize player state
@@ -204,7 +186,8 @@ public void OnClientPutInServer(int client) {
 }
 
 public void OnClientDisconnect(int client) {
-    if (!IsValidClient(client))
+    // Don't use IsValidClient - client is disconnecting so IsClientInGame returns false
+    if (client <= 0 || client > MaxClients)
         return;
         
     // Reset movement flag
@@ -215,14 +198,10 @@ public void OnClientDisconnect(int client) {
     
     // Reset health tracking
     g_iMaxHealth[client] = 0;
-    
-    // Reset damage tracking for this player
-    ResetPlayerDmgBasedRegen(client, true);
 }
 
 public void OnPluginEnd() {
     // Clean up health regen system
-    KillTimerSafely(g_hRecentDamageTimer);
     ResetAllPlayersRegen();
     
     // Clean up spawn point arrays
@@ -325,11 +304,6 @@ public Action Event_PlayerHurt(Event event, const char[] name, bool dontBroadcas
         return Plugin_Continue;
     }
 
-    int damage = event.GetInt("damageamount");
-    
-    // Track recent damage for regen system
-    g_iRecentDamage[attacker][victim][RECENT_DAMAGE_SECONDS - 1] += damage;
-    
     // Stop regen for victim when they take damage
     StopRegen(victim);
     
@@ -403,10 +377,7 @@ public Action StartRegen(Handle timer, any userid) {
 }
 
 void StopRegen(int client) {
-    if (g_hRegenTimer[client] != INVALID_HANDLE) {
-        KillTimer(g_hRegenTimer[client]);
-        g_hRegenTimer[client] = INVALID_HANDLE;
-    }
+    KillTimerSafely(g_hRegenTimer[client]);
     g_bRegen[client] = false;
 }
 
@@ -483,26 +454,17 @@ public void OnDMDraftInProgressChanged(ConVar convar, const char[] oldValue, con
 public void OnDMStopAllChanged(ConVar convar, const char[] oldValue, const char[] newValue) {
     if (convar == null) return;
     
+    // Don't modify ConVar from its own callback - use deferred action instead
     if (GetConVarBool(convar)) {
         ResetAllPlayersRegen();
-        SetConVarInt(convar, 0);
+        // Reset via deferred timer to avoid ConVar callback loop
+        CreateTimer(0.1, Timer_ResetDMStop);
     }
 }
 
-void ResetPlayerDmgBasedRegen(int client, bool alsoResetTaken = false) {
-    for (int player = 1; player <= MaxClients; player++) {
-        for (int i = 0; i < RECENT_DAMAGE_SECONDS; i++) {
-            g_iRecentDamage[player][client][i] = 0;
-        }
-    }
-    
-    if (alsoResetTaken) {
-        for (int player = 1; player <= MaxClients; player++) {
-            for (int i = 0; i < RECENT_DAMAGE_SECONDS; i++) {
-                g_iRecentDamage[client][player][i] = 0;
-            }
-        }
-    }
+public Action Timer_ResetDMStop(Handle timer) {
+    SetConVarInt(g_hDMStopAll, 0);
+    return Plugin_Stop;
 }
 
 void ResetAllPlayersRegen() {
@@ -512,24 +474,10 @@ void ResetAllPlayersRegen() {
             StopRegen(i);
         }
         // Reset all player state arrays (must happen for all indices)
-        ResetPlayerDmgBasedRegen(i);
         g_bRegen[i] = false;
         g_iMaxHealth[i] = 0;
         g_bPlayerMoved[i] = false;
     }
-}
-
-public Action Timer_RecentDamage(Handle timer) {
-    // Shift damage array left by 1 second
-    for (int attacker = 1; attacker <= MaxClients; attacker++) {
-        for (int victim = 1; victim <= MaxClients; victim++) {
-            for (int i = 0; i < RECENT_DAMAGE_SECONDS - 1; i++) {
-                g_iRecentDamage[attacker][victim][i] = g_iRecentDamage[attacker][victim][i + 1];
-            }
-            g_iRecentDamage[attacker][victim][RECENT_DAMAGE_SECONDS - 1] = 0;
-        }
-    }
-    return Plugin_Continue;
 }
 
 // ========================================

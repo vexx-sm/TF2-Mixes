@@ -21,7 +21,7 @@ public Plugin myinfo = {
     name = "TF2-Mixes",
     author = "vexx-sm",
     description = "A TF2 SourceMod plugin that sets up a 6s mix",
-    version = "0.3.0",
+    version = "0.3.1",
     url = "https://github.com/vexx-sm/TF2-Mixes"
 };
 
@@ -48,6 +48,7 @@ int g_iSavedPicksRemaining = 0;
 float g_fSavedPickTimerStartTime = 0.0;
 int g_iSavedCountdownSeconds = 0;
 
+
 // Player reconnection state preservation
 int g_iDisconnectedPlayerTeam[MAXPLAYERS + 1];
 bool g_bDisconnectedPlayerPicked[MAXPLAYERS + 1];
@@ -58,7 +59,6 @@ Handle g_hVoteTimer = INVALID_HANDLE;
 int g_iVoteCount[2] = {0, 0};
 bool g_bPlayerVoted[MAXPLAYERS + 1];
 float g_fPickTimerStartTime = 0.0;
-int g_iOriginalTeam[MAXPLAYERS + 1];
 bool g_bPlayerPicked[MAXPLAYERS + 1];
 float g_fVoteStartTime = 0.0;
 
@@ -79,6 +79,13 @@ char ETF2L_WHITELIST_PATH[] = "cfg/etf2l_whitelist_6v6.txt";
 // DM module integration
 bool g_bDMPluginLoaded = false;
 
+// Tournament pre-start flag to align countdown with tournament ready-up
+bool g_bPreStartedTournament = false;
+
+// Chat color tag for consistent branding
+static const char MIX_TAG[] = "\x07FFD700[Mix]\x01 ";
+bool g_bDMAnnounced = false;
+
 ConVar g_cvPickTimeout;
 ConVar g_cvCommandCooldown;
 ConVar g_cvGracePeriod;
@@ -90,10 +97,43 @@ bool IsValidClient(int client) {
     return (client > 0 && client <= MaxClients && IsClientInGame(client));
 }
 
+// Helper function to find player by name (exact or partial match)
+int FindPlayerByName(const char[] target, int teamFilter = 0, bool spectatorOnly = false) {
+    char targetName[MAX_NAME_LENGTH];
+    
+    // Exact match first
+    for (int i = 1; i <= MaxClients; i++) {
+        if (!IsValidClient(i)) continue;
+        
+        // Apply filters
+        if (teamFilter > 0 && GetClientTeam(i) != teamFilter) continue;
+        if (spectatorOnly && view_as<TFTeam>(GetClientTeam(i)) != TFTeam_Spectator) continue;
+        
+        GetClientName(i, targetName, sizeof(targetName));
+        if (StrEqual(targetName, target, false)) {
+            return i;
+        }
+    }
+    
+    // Partial match fallback
+    for (int i = 1; i <= MaxClients; i++) {
+        if (!IsValidClient(i)) continue;
+        
+        if (teamFilter > 0 && GetClientTeam(i) != teamFilter) continue;
+        if (spectatorOnly && view_as<TFTeam>(GetClientTeam(i)) != TFTeam_Spectator) continue;
+        
+        GetClientName(i, targetName, sizeof(targetName));
+        if (StrContains(targetName, target, false) != -1) {
+            return i;
+        }
+    }
+    
+    return -1;
+}
+
 void KillTimerSafely(Handle &timer) {
     if (timer != INVALID_HANDLE) {
-        // Use CloseHandle which is safer for plugin reload scenarios
-        CloseHandle(timer);
+        delete timer;
         timer = INVALID_HANDLE;
     }
 }
@@ -115,6 +155,8 @@ void SetMixState(int newState) {
         case STATE_LIVE_GAME: EnterLiveGameState();
         case STATE_POST_GAME: EnterPostGameState();
     }
+    
+    // Update crown effects based on new state
 }
 
 // ========================================
@@ -123,81 +165,124 @@ void SetMixState(int newState) {
 
 void ApplyIdleStateCvars() {
     // Disable tournament mode
-    ServerCommand("mp_tournament 0");
-    ServerCommand("mp_tournament_allow_non_admin_restart 1");
+    ServerCommandSilent("mp_tournament 0");
+    ServerCommandSilent("mp_tournament_allow_non_admin_restart 1");
     
     // Clear whitelist
-    ServerCommand("mp_tournament_whitelist \"\"");
+    ServerCommandSilent("mp_tournament_whitelist \"\"");
     
     // Reset ALL win conditions
-    ServerCommand("mp_winlimit 0");
-    ServerCommand("mp_maxrounds 0");
-    ServerCommand("mp_timelimit 0");
-    ServerCommand("mp_windifference 0");
+    ServerCommandSilent("mp_winlimit 0");
+    ServerCommandSilent("mp_maxrounds 0");
+    ServerCommandSilent("mp_timelimit 0");
+    ServerCommandSilent("mp_windifference 0");
     
-    // Normal team settings
-    ServerCommand("mp_teams_unbalance_limit 1");
-    ServerCommand("mp_autoteambalance 1");
-    ServerCommand("mp_forceautoteam 0");
+    // Ensure fixed weapon spread always enabled
+    ServerCommandSilent("tf_use_fixed_weaponspreads 1");
+    ServerCommandSilent("tf_damage_disablespread 1");
+    
+    // Truly unlocked teams - no limits, no autobalance, instant respawn
+    ServerCommandSilent("mp_teams_unbalance_limit 0");
+    ServerCommandSilent("mp_autoteambalance 0");
+    ServerCommandSilent("mp_forceautoteam 0");
+    ServerCommandSilent("mp_disable_respawn_times 1"); // Enable instant respawn
+    
+    // Remove class limits
+    SetCvarInt("tf_tournament_classlimit_scout", 0);
+    SetCvarInt("tf_tournament_classlimit_soldier", 0);
+    SetCvarInt("tf_tournament_classlimit_pyro", 0);
+    SetCvarInt("tf_tournament_classlimit_demoman", 0);
+    SetCvarInt("tf_tournament_classlimit_heavy", 0);
+    SetCvarInt("tf_tournament_classlimit_engineer", 0);
+    SetCvarInt("tf_tournament_classlimit_medic", 0);
+    SetCvarInt("tf_tournament_classlimit_sniper", 0);
+    SetCvarInt("tf_tournament_classlimit_spy", 0);
     
     // Normal bot settings
-    ServerCommand("tf_bot_quota_mode normal");
-    ServerCommand("tf_bot_quota 0");
+    ServerCommandSilent("tf_bot_quota_mode normal");
+    ServerCommandSilent("tf_bot_quota 0");
     
     // Restart game to clear tournament state
-    ServerCommand("mp_restartgame 1");
+    ServerCommand("mp_restartgame 1"); // Keep visible for restart notification
 }
 
 void ApplyPreDraftStateCvars() {
     // Keep tournament mode disabled
-    ServerCommand("mp_tournament 0");
+    ServerCommandSilent("mp_tournament 0");
     
     // No win conditions
-    ServerCommand("mp_winlimit 0");
-    ServerCommand("mp_maxrounds 0");
-    ServerCommand("mp_timelimit 0");
-    ServerCommand("mp_windifference 0");
+    ServerCommandSilent("mp_winlimit 0");
+    ServerCommandSilent("mp_maxrounds 0");
+    ServerCommandSilent("mp_timelimit 0");
+    ServerCommandSilent("mp_windifference 0");
+    
+    // Ensure fixed weapon spread always enabled
+    ServerCommandSilent("tf_use_fixed_weaponspreads 1");
+    ServerCommandSilent("tf_damage_disablespread 1");
     
     // No whitelist
-    ServerCommand("mp_tournament_whitelist \"\"");
+    ServerCommandSilent("mp_tournament_whitelist \"\"");
     
-    // Normal team settings
-    ServerCommand("mp_teams_unbalance_limit 1");
-    ServerCommand("mp_autoteambalance 1");
-    ServerCommand("mp_forceautoteam 0");
+    // Truly unlocked teams - no limits, no autobalance, instant respawn
+    ServerCommandSilent("mp_teams_unbalance_limit 0");
+    ServerCommandSilent("mp_autoteambalance 0");
+    ServerCommandSilent("mp_forceautoteam 0");
+    ServerCommandSilent("mp_disable_respawn_times 1"); // Enable instant respawn
+    
+    // Remove class limits
+    SetCvarInt("tf_tournament_classlimit_scout", 0);
+    SetCvarInt("tf_tournament_classlimit_soldier", 0);
+    SetCvarInt("tf_tournament_classlimit_pyro", 0);
+    SetCvarInt("tf_tournament_classlimit_demoman", 0);
+    SetCvarInt("tf_tournament_classlimit_heavy", 0);
+    SetCvarInt("tf_tournament_classlimit_engineer", 0);
+    SetCvarInt("tf_tournament_classlimit_medic", 0);
+    SetCvarInt("tf_tournament_classlimit_sniper", 0);
+    SetCvarInt("tf_tournament_classlimit_spy", 0);
 }
 
 void ApplyDraftStateCvars() {
     // Keep tournament mode disabled
-    ServerCommand("mp_tournament 0");
+    ServerCommandSilent("mp_tournament 0");
     
     // No win conditions
-    ServerCommand("mp_winlimit 0");
-    ServerCommand("mp_maxrounds 0");
-    ServerCommand("mp_timelimit 0");
-    ServerCommand("mp_windifference 0");
+    ServerCommandSilent("mp_winlimit 0");
+    ServerCommandSilent("mp_maxrounds 0");
+    ServerCommandSilent("mp_timelimit 0");
+    ServerCommandSilent("mp_windifference 0");
+    
+    // Ensure fixed weapon spread always enabled
+    ServerCommandSilent("tf_use_fixed_weaponspreads 1");
+    ServerCommandSilent("tf_damage_disablespread 1");
     
     // No whitelist
-    ServerCommand("mp_tournament_whitelist \"\"");
+    ServerCommandSilent("mp_tournament_whitelist \"\"");
+    
+    // Enable instant respawn during draft for warmup
+    ServerCommandSilent("mp_disable_respawn_times 1");
     
     // Prevent team balance during draft
-    ServerCommand("mp_teams_unbalance_limit 1");
-    ServerCommand("mp_autoteambalance 0");
-    ServerCommand("mp_forceautoteam 0");
+    ServerCommandSilent("mp_teams_unbalance_limit 1");
+    ServerCommandSilent("mp_autoteambalance 0");
+    ServerCommandSilent("mp_forceautoteam 0");
 }
 
 void ApplyLiveGameStateCvars() {
     // Enable tournament mode
-    ServerCommand("mp_tournament 1");
-    ServerCommand("mp_tournament_allow_non_admin_restart 1");
+    ServerCommandSilent("mp_tournament 1");
+    ServerCommandSilent("mp_tournament_allow_non_admin_restart 1");
     
     // Apply whitelist
     SetCvarString("mp_tournament_whitelist", ETF2L_WHITELIST_PATH);
     
     // Competitive gameplay settings
-    ServerCommand("tf_use_fixed_weaponspreads 1");
-    ServerCommand("tf_weapon_criticals 0");
-    ServerCommand("tf_damage_disablespread 1");
+    ServerCommandSilent("tf_use_fixed_weaponspreads 1");
+    ServerCommandSilent("tf_weapon_criticals 0");
+    ServerCommandSilent("tf_damage_disablespread 1");
+    
+    // CRITICAL: Disable instant respawn and enable respawn waves
+    ServerCommandSilent("mp_disable_respawn_times 1");
+    ServerCommandSilent("mp_respawnwavetime 10");
     
     // Apply ETF2L class limits
     SetCvarInt("tf_tournament_classlimit_scout", 2);
@@ -224,17 +309,14 @@ void ApplyLiveGameStateCvars() {
     }
     
     // Strict team settings
-    ServerCommand("mp_teams_unbalance_limit 0");
-    ServerCommand("mp_autoteambalance 0");
-    ServerCommand("mp_forceautoteam 0");
+    ServerCommandSilent("mp_teams_unbalance_limit 0");
+    ServerCommandSilent("mp_autoteambalance 0");
+    ServerCommandSilent("mp_forceautoteam 0");
 }
 
 void EnterIdleState() {
     // Reset all timers
     KillAllTimers();
-    
-    // Reset all state variables
-    bool hadCaptains = (g_iCaptain1 != -1 || g_iCaptain2 != -1);
     
     // Restore captain names before resetting
     if (g_iCaptain1 != -1 && IsValidClient(g_iCaptain1)) {
@@ -257,7 +339,6 @@ void EnterIdleState() {
         g_bPlayerLocked[i] = false;
         g_bPlayerPicked[i] = false;
         g_bPlayerVoted[i] = false;
-        g_iOriginalTeam[i] = 0;
         g_fLastCommandTime[i] = 0.0;
         g_sOriginalNames[i][0] = '\0';
         g_bPlayerDisconnected[i] = false;
@@ -277,11 +358,6 @@ void EnterIdleState() {
     // Start HUD timer
     if (g_hHudTimer == INVALID_HANDLE) {
         g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
-    }
-    
-    // Only show message if we had an active mix
-    if (hadCaptains) {
-        PrintToChatAll("\x01[Mix] \x03Mix has ended. Teams are now unlocked.");
     }
 }
 
@@ -348,12 +424,12 @@ void EnterDraftState() {
     KillTimerSafely(g_hPickTimer);
     g_hPickTimer = CreateTimer(g_cvPickTimeout.FloatValue, Timer_PickTimeout);
     
-    // Start HUD timer
+// Start HUD timer
     if (g_hHudTimer == INVALID_HANDLE) {
         g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
     }
     
-    PrintToChatAll("\x01[Mix] \x03Draft has started! First captain's turn to pick.");
+    PrintToChatAll("%s\x03Draft has started! First captain's turn to pick.", MIX_TAG);
     
     // Open draft menu for first captain
     if (IsValidClient(g_iCaptain1)) {
@@ -386,9 +462,13 @@ void EnterLiveGameState() {
         }
     }
     
-    // Restart tournament and force teams ready
-    ServerCommand("mp_tournament_restart");
-    CreateTimer(0.5, Timer_ForceTeamsReady);
+    // Restart tournament and force teams ready (unless already pre-started)
+    if (!g_bPreStartedTournament) {
+        ServerCommand("mp_tournament_restart");
+        CreateTimer(0.5, Timer_ForceTeamsReady);
+    } else {
+        g_bPreStartedTournament = false;
+    }
     
     // Show completion message
     CreateTimer(3.0, Timer_ShowDraftCompleteMessage);
@@ -421,8 +501,6 @@ void RestorePlayerState(int client) {
         TF2_ChangeClientTeam(client, view_as<TFTeam>(g_iDisconnectedPlayerTeam[client]));
         g_bPlayerLocked[client] = true;
         g_bPlayerPicked[client] = g_bDisconnectedPlayerPicked[client];
-        
-        PrintToChatAll("\x01[Mix] \x03%N has reconnected and rejoined their team!", client);
     }
     
     // Clear disconnection state
@@ -438,32 +516,90 @@ public void OnPluginStart() {
     // Disable hint text sound to prevent timer noise
     ServerCommand("sv_hudhint_sound 0");
     
+    // Captain commands
     RegConsoleCmd("sm_captain", Command_Captain, "Become a captain");
     RegConsoleCmd("sm_cap", Command_Captain, "Become a captain");
+    RegConsoleCmd("sm_capitan", Command_Captain, "Become a captain"); // Common typo
+    RegConsoleCmd("sm_capt", Command_Captain, "Become a captain"); // Short version
+    
+    // Draft/pick commands
     RegConsoleCmd("sm_draft", Command_Draft, "Draft a player or show draft menu");
     RegConsoleCmd("sm_pick", Command_Draft, "Draft a player or show draft menu");
+    RegConsoleCmd("sm_drft", Command_Draft, "Draft a player or show draft menu"); // Fast typer
+    RegConsoleCmd("sm_pik", Command_Draft, "Draft a player or show draft menu"); // Fast typer
+    RegConsoleCmd("sm_p", Command_Draft, "Draft a player or show draft menu"); // Ultra short
+    
+    // Remove commands
     RegConsoleCmd("sm_remove", Command_Remove, "Remove a player from your team (counts as a turn)");
+    RegConsoleCmd("sm_rmv", Command_Remove, "Remove a player from your team (counts as a turn)"); // Fast typer
+    RegConsoleCmd("sm_rm", Command_Remove, "Remove a player from your team (counts as a turn)"); // Short version
+    RegConsoleCmd("sm_kick", Command_Remove, "Remove a player from your team (counts as a turn)"); // Intuitive alias
+    
+    // Restart commands
     RegConsoleCmd("sm_restart", Command_RestartDraft, "Vote to restart after game ends");
     RegConsoleCmd("sm_redraft", Command_RestartDraft, "Vote to restart after game ends");
+    RegConsoleCmd("sm_reset", Command_RestartDraft, "Vote to restart after game ends"); // Common alternative
+    RegConsoleCmd("sm_mixrestart", Command_RestartDraft, "Vote to restart after game ends"); // Noun-first
+    RegConsoleCmd("sm_restartmix", Command_RestartDraft, "Vote to restart after game ends"); // Verb-first
+    
+    // Cancel commands
     RegConsoleCmd("sm_cancelmix", Command_CancelMix, "Cancel current mix");
+    RegConsoleCmd("sm_mixcancel", Command_CancelMix, "Cancel current mix"); // Noun-first
+    RegConsoleCmd("sm_cancel", Command_CancelMix, "Cancel current mix"); // Short version
+    RegConsoleCmd("sm_cancle", Command_CancelMix, "Cancel current mix"); // Common typo
+    RegConsoleCmd("sm_stop", Command_CancelMix, "Cancel current mix"); // Intuitive alias
+    RegConsoleCmd("sm_abort", Command_CancelMix, "Cancel current mix"); // Alternative
+    
+    // Help commands
     RegConsoleCmd("sm_helpmix", Command_HelpMix, "Show help menu with all commands");
     RegConsoleCmd("sm_help", Command_HelpMix, "Show help menu with all commands");
+    RegConsoleCmd("sm_mixhelp", Command_HelpMix, "Show help menu with all commands"); // Noun-first
+    RegConsoleCmd("sm_commands", Command_HelpMix, "Show help menu with all commands"); // Alternative
+    RegConsoleCmd("sm_cmds", Command_HelpMix, "Show help menu with all commands"); // Short version
     
     AddCommandListener(Command_JoinTeam, "jointeam");
     AddCommandListener(Command_JoinTeam, "spectate");
     
+    // Admin captain commands
     RegAdminCmd("sm_setcaptain", Command_SetCaptain, ADMFLAG_GENERIC, "Set a player as captain");
     RegAdminCmd("sm_setcap", Command_SetCaptain, ADMFLAG_GENERIC, "Set a player as captain");
+    RegAdminCmd("sm_forcecaptain", Command_SetCaptain, ADMFLAG_GENERIC, "Set a player as captain"); // Alternative
+    RegAdminCmd("sm_makecaptain", Command_SetCaptain, ADMFLAG_GENERIC, "Set a player as captain"); // Intuitive
+    
+    // Admin pick commands
     RegAdminCmd("sm_adminpick", Command_AdminPick, ADMFLAG_GENERIC, "Force pick a player");
+    RegAdminCmd("sm_forcepick", Command_AdminPick, ADMFLAG_GENERIC, "Force pick a player"); // Alternative
+    RegAdminCmd("sm_apick", Command_AdminPick, ADMFLAG_GENERIC, "Force pick a player"); // Short version
+    
+    // Admin draft commands
     RegAdminCmd("sm_autodraft", Command_AutoDraft, ADMFLAG_GENERIC, "Automatically draft teams");
+    RegAdminCmd("sm_autofill", Command_AutoDraft, ADMFLAG_GENERIC, "Automatically draft teams"); // Alternative
+    RegAdminCmd("sm_quickdraft", Command_AutoDraft, ADMFLAG_GENERIC, "Automatically draft teams"); // Alternative
+    
+    // Admin misc commands
     RegAdminCmd("sm_outline", Command_ToggleOutlines, ADMFLAG_GENERIC, "Toggle teammate outlines for all players");
+    RegAdminCmd("sm_outlines", Command_ToggleOutlines, ADMFLAG_GENERIC, "Toggle teammate outlines for all players"); // Plural
     RegAdminCmd("sm_rup", Command_ForceReadyUp, ADMFLAG_GENERIC, "Force both teams ready (testing)");
+    RegAdminCmd("sm_ready", Command_ForceReadyUp, ADMFLAG_GENERIC, "Force both teams ready (testing)"); // Intuitive
+    RegAdminCmd("sm_forceready", Command_ForceReadyUp, ADMFLAG_GENERIC, "Force both teams ready (testing)"); // Explicit
+    
+    // Update commands
     RegAdminCmd("sm_updatemix", Command_UpdateMix, ADMFLAG_ROOT, "Download and install plugin updates");
     RegAdminCmd("sm_mixupdate", Command_UpdateMix, ADMFLAG_ROOT, "Download and install plugin updates");
+    RegAdminCmd("sm_update", Command_UpdateMix, ADMFLAG_ROOT, "Download and install plugin updates"); // Short version
+    
+    // Version commands
     RegConsoleCmd("sm_mixversion", Command_MixVersion, "Show current plugin version and update status");
+    RegConsoleCmd("sm_version", Command_MixVersion, "Show current plugin version and update status"); // Short version
+    RegConsoleCmd("sm_mixver", Command_MixVersion, "Show current plugin version and update status"); // Short version
+    RegConsoleCmd("sm_ver", Command_MixVersion, "Show current plugin version and update status"); // Ultra short
+    
+    // Testing/Development commands
+    RegAdminCmd("sm_mixtest", Command_MixTest, ADMFLAG_GENERIC, "Quick test setup: enable cheats, add 11 bots, set you as captain");
+    RegAdminCmd("sm_testmix", Command_MixTest, ADMFLAG_GENERIC, "Quick test setup: enable cheats, add 11 bots, set you as captain");
     
     // Public version ConVar for server tracking (FCVAR_NOTIFY | FCVAR_DONTRECORD)
-    CreateConVar("sm_mixes_version", "0.3.0", "TF2-Mixes plugin version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
+    CreateConVar("sm_mixes_version", "0.3.1", "TF2-Mixes plugin version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
     
     g_cvPickTimeout = CreateConVar("sm_mix_pick_timeout", "30.0", "Time limit for picks in seconds");
     g_cvCommandCooldown = CreateConVar("sm_mix_command_cooldown", "5.0", "Cooldown time for commands in seconds");
@@ -493,15 +629,55 @@ public void OnPluginStart() {
     CreateTimer(5.0, Timer_CheckUpdates);
 }
 
+public void OnAllPluginsLoaded() {
+    // Check if DM module is loaded
+    g_bDMPluginLoaded = LibraryExists("mixes_dm");
+    g_bDMAnnounced = false;
+}
+
+public void OnLibraryAdded(const char[] name) {
+    if (StrEqual(name, "mixes_dm")) {
+        if (!g_bDMPluginLoaded) {
+            g_bDMPluginLoaded = true;
+        }
+    }
+}
+
+public void OnLibraryRemoved(const char[] name) {
+    if (StrEqual(name, "mixes_dm")) {
+        g_bDMPluginLoaded = false;
+        PrintToServer("[Mix] DM module unloaded - DM features disabled");
+    }
+}
+
+public void OnPluginEnd() {
+    // Kill all timers to prevent leaks
+    KillAllTimers();
+    
+    // Reset to idle state (restores cvars)
+    SetMixState(STATE_IDLE);
+    
+    // Restore all captain names
+    for (int i = 1; i <= MaxClients; i++) {
+        if (IsValidClient(i) && strlen(g_sOriginalNames[i]) > 0) {
+            SetClientName(i, g_sOriginalNames[i]);
+        }
+    }
+}
+
 public void OnMapStart() {
     // Reset to idle state
     SetMixState(STATE_IDLE);
+    
+    // Reset DM announcement each map
+    g_bDMAnnounced = false;
     
     // Set waiting for players time
     ConVar cWait = FindConVar("mp_waitingforplayers_time");
     if (cWait != null) {
         SetConVarInt(cWait, 0);
     }
+
 
     CreateTimer(2.0, Timer_ShowInfoCard);
 }
@@ -511,19 +687,20 @@ public void OnClientPutInServer(int client) {
         GetClientName(client, g_sOriginalNames[client], sizeof(g_sOriginalNames[]));
         
         // Handle player reconnection based on current state
-        if (g_eCurrentState == STATE_LIVE_GAME) {
+        if (g_eCurrentState == STATE_LIVE_GAME || g_eCurrentState == STATE_DRAFT) {
             // Check if this player was disconnected and restore their state
             if (g_bPlayerDisconnected[client]) {
                 RestorePlayerState(client);
                 return;
             }
         }
-        else if (g_eCurrentState == STATE_IDLE || g_eCurrentState == STATE_PRE_DRAFT) {
+        
+        if (g_eCurrentState == STATE_IDLE || g_eCurrentState == STATE_PRE_DRAFT) {
             // Normal player joining
-        g_bPlayerLocked[client] = false;
+            g_bPlayerLocked[client] = false;
         }
         else if (g_eCurrentState == STATE_DRAFT) {
-            // Player joining during draft - put them in spectator
+            // New player joining during draft - put them in spectator
             g_bPlayerLocked[client] = false;
             TF2_ChangeClientTeam(client, TFTeam_Spectator);
         }
@@ -536,77 +713,64 @@ public void OnClientPutInServer(int client) {
 }
 
 public void OnClientDisconnect(int client) {
-    if (!IsValidClient(client))
+    // Don't use IsValidClient - client is disconnecting so IsClientInGame returns false
+    if (client <= 0 || client > MaxClients)
         return;
-        
-    // Handle captain disconnection
-    if (client == g_iCaptain1 || client == g_iCaptain2) {
-        SetClientName(client, g_sOriginalNames[client]);
     
+    // Determine which captain (if any) disconnected
+    int captainIndex = -1;
     if (client == g_iCaptain1) {
+        captainIndex = 0;
         g_iCaptain1 = -1;
-            if (g_eCurrentState == STATE_DRAFT) {
-                if (!IsFakeClient(client)) {
-                    StartGracePeriod(0);
-                }
-            } else if (g_eCurrentState == STATE_PRE_DRAFT) {
-                PrintToChatAll("\x01[Mix] \x03First captain has left! Need a new captain to continue.");
-                // Check if both captains are now gone
-                if (g_iCaptain2 == -1) {
-                    SetMixState(STATE_IDLE);
-            }
-        } else {
-            PrintToChatAll("\x01[Mix] \x03First captain has left the game!");
-        }
     } else if (client == g_iCaptain2) {
+        captainIndex = 1;
         g_iCaptain2 = -1;
-            if (g_eCurrentState == STATE_DRAFT) {
-                if (!IsFakeClient(client)) {
-                    StartGracePeriod(1);
-                }
-            } else if (g_eCurrentState == STATE_PRE_DRAFT) {
-                PrintToChatAll("\x01[Mix] \x03Second captain has left! Need a new captain to continue.");
-                // Check if both captains are now gone
-                if (g_iCaptain1 == -1) {
-                    SetMixState(STATE_IDLE);
-            }
-        } else {
-            PrintToChatAll("\x01[Mix] \x03Second captain has left the game!");
+    }
+    
+    // Handle captain or regular player disconnection
+    if (captainIndex != -1) {
+        HandleCaptainDisconnect(client, captainIndex);
+    } else {
+        HandlePlayerDisconnect(client);
+    }
+    
+    // Reset player state (except for live game and draft preservation)
+    if (g_eCurrentState != STATE_LIVE_GAME && g_eCurrentState != STATE_DRAFT) {
+        g_bPlayerLocked[client] = false;
+        g_bPlayerPicked[client] = false;
+    }
+}
+
+void HandleCaptainDisconnect(int client, int captainIndex) {
+    if (g_eCurrentState == STATE_DRAFT && !IsFakeClient(client)) {
+        StartGracePeriod(captainIndex);
+    } else if (g_eCurrentState == STATE_PRE_DRAFT) {
+        // Check if both captains are now gone
+        if (g_iCaptain1 == -1 && g_iCaptain2 == -1) {
+            SetMixState(STATE_IDLE);
         }
     }
-    } else {
-        // Handle regular player disconnection based on state
-        if (g_eCurrentState == STATE_LIVE_GAME) {
-            // Preserve player state for reconnection
-            if (g_bPlayerPicked[client]) {
-                PreservePlayerState(client);
-                PrintToChatAll("\x01[Mix] \x03%N has left the game! They can rejoin when they return.", client);
-            }
-        }
-        else if (g_eCurrentState == STATE_DRAFT) {
-            // Handle drafted player disconnection during draft
-            if (g_bPlayerPicked[client]) {
-                PrintToChatAll("\x01[Mix] \x03%N has left the game! They can rejoin when they return.", client);
-                
-                // Check if teams are still balanced after disconnection
+}
+
+void HandlePlayerDisconnect(int client) {
+    if (g_eCurrentState == STATE_LIVE_GAME || g_eCurrentState == STATE_DRAFT) {
+        // Preserve player state for reconnection during draft and live game
+        if (g_bPlayerPicked[client]) {
+            PreservePlayerState(client);
+            
+            // During draft, check if teams are still balanced
+            if (g_eCurrentState == STATE_DRAFT) {
                 int redCount, bluCount;
                 GetTeamSizes(redCount, bluCount);
                 
                 // If teams are unbalanced, allow more picks
                 if (redCount < TEAM_SIZE || bluCount < TEAM_SIZE) {
                     if (g_iPicksRemaining <= 0) {
-                        g_iPicksRemaining = 1; // Allow one more pick to balance teams
-                        PrintToChatAll("\x01[Mix] \x03Teams are unbalanced! Draft continues to balance teams.");
+                        g_iPicksRemaining = 1;
                     }
                 }
             }
         }
-    }
-    
-    // Reset player state (except for live game preservation)
-    if (g_eCurrentState != STATE_LIVE_GAME) {
-    g_bPlayerLocked[client] = false;
-        g_bPlayerPicked[client] = false;
     }
 }
 
@@ -614,67 +778,74 @@ public Action Command_Captain(int client, int args) {
     if (!IsValidClient(client))
         return Plugin_Handled;
     
-    // Allow captain selection during IDLE and PRE_DRAFT (in case a captain drops)
-    if (g_eCurrentState != STATE_IDLE && g_eCurrentState != STATE_PRE_DRAFT) {
-        ReplyToCommand(client, "\x01[Mix] \x03Captain selection is only available before the draft starts!");
-        return Plugin_Handled;
-    }
-        
-    float currentTime = GetGameTime();
-    float timeSinceLastCommand = currentTime - g_fLastCommandTime[client];
-    float cooldownTime = g_cvCommandCooldown.FloatValue;
-    
-    if (timeSinceLastCommand < cooldownTime) {
-        ReplyToCommand(client, "\x01[Mix] \x03Please wait %.1f seconds before using this command again.", cooldownTime - timeSinceLastCommand);
-        return Plugin_Handled;
-    }
-    
-    g_fLastCommandTime[client] = currentTime;
-        
-    if (client == g_iCaptain1 || client == g_iCaptain2) {
-        if (client == g_iCaptain1) {
-            g_iCaptain1 = -1;
-            SetClientName(client, g_sOriginalNames[client]);
-            PrintToChat(client, "\x01[Mix] \x03You are no longer the first captain.");
-            if (g_eCurrentState == STATE_DRAFT) {
-                KillTimerSafely(g_hPickTimer);
-                StartGracePeriod(0);
-                Timer_UpdateHUD(g_hHudTimer);
-            } else {
-                PrintToChatAll("\x01[Mix] \x03%N\x01 is no longer a captain!", client);
-            }
-        } else {
-            g_iCaptain2 = -1;
-            SetClientName(client, g_sOriginalNames[client]);
-            PrintToChat(client, "\x01[Mix] \x03You are no longer the second captain.");
-            if (g_eCurrentState == STATE_DRAFT) {
-                KillTimerSafely(g_hPickTimer);
-                StartGracePeriod(1);
-                Timer_UpdateHUD(g_hHudTimer);
-            } else {
-                PrintToChatAll("\x01[Mix] \x03%N\x01 is no longer a captain!", client);
-            }
-        }
-        return Plugin_Handled;
-    }
-    
+    // Check for replacement captain FIRST (during grace period in draft)
     if (g_eCurrentState == STATE_DRAFT && g_iMissingCaptain != -1) {
-        if (g_iMissingCaptain == 0) {
+        // Assign to the fixed slot (0=RED, 1=BLU) and force correct team
+        int slot = g_iMissingCaptain;
+        TFTeam slotTeam = (slot == 0) ? TFTeam_Red : TFTeam_Blue;
+        TF2_ChangeClientTeam(client, slotTeam);
+        g_bPlayerLocked[client] = true;
+        g_bPlayerPicked[client] = true;
+        
+        if (slot == 0) {
             g_iCaptain1 = client;
         } else {
             g_iCaptain2 = client;
         }
         
-            if (strlen(g_sOriginalNames[client]) == 0) {
-                GetClientName(client, g_sOriginalNames[client], sizeof(g_sOriginalNames[]));
-            }
-            char newName[MAX_NAME_LENGTH];
-            Format(newName, sizeof(newName), "%s [CAP]", g_sOriginalNames[client]);
-            SetClientName(client, newName);
+        if (strlen(g_sOriginalNames[client]) == 0) {
+            GetClientName(client, g_sOriginalNames[client], sizeof(g_sOriginalNames[]));
+        }
+        char newName[MAX_NAME_LENGTH];
+        Format(newName, sizeof(newName), "[CAP] %s", g_sOriginalNames[client]);
+        SetClientName(client, newName);
         
-        PrintToChatAll("\x01[Mix] \x03%N\x01 has become the replacement captain!", client);
-            ResumeDraft();
+        PrintToChatAll("%s\x03%N\x01 is the replacement captain for %s!", MIX_TAG, client, (slot == 0) ? "\x07FF4444RED\x01" : "\x0744A3FFBLU\x01");
+        ResumeDraft(); // This will clear g_iMissingCaptain and stop grace timer
+        return Plugin_Handled;
+    }
+    
+    float currentTime = GetGameTime();
+    float cooldownTime = g_cvCommandCooldown.FloatValue;
+    
+    if (currentTime - g_fLastCommandTime[client] < cooldownTime) {
+        return Plugin_Handled;
+    }
+    
+    g_fLastCommandTime[client] = currentTime;
+    
+    // Allow captains to drop themselves (except during LIVE_GAME)
+    if (client == g_iCaptain1 || client == g_iCaptain2) {
+        // Block captain drop during LIVE_GAME
+        if (g_eCurrentState == STATE_LIVE_GAME) {
+            ReplyToCommand(client, "\x01[Mix] \x03You cannot drop captain status during a live game!");
             return Plugin_Handled;
+        }
+        
+        if (client == g_iCaptain1) {
+            g_iCaptain1 = -1;
+            SetClientName(client, g_sOriginalNames[client]);
+            if (g_eCurrentState == STATE_DRAFT) {
+                KillTimerSafely(g_hPickTimer);
+                StartGracePeriod(0);
+                UpdateHUDForAll();
+            }
+        } else {
+            g_iCaptain2 = -1;
+            SetClientName(client, g_sOriginalNames[client]);
+            if (g_eCurrentState == STATE_DRAFT) {
+                KillTimerSafely(g_hPickTimer);
+                StartGracePeriod(1);
+                UpdateHUDForAll();
+            }
+        }
+        return Plugin_Handled;
+    }
+    
+    // Block NEW captain selection during DRAFT and LIVE_GAME
+    if (g_eCurrentState == STATE_DRAFT || g_eCurrentState == STATE_LIVE_GAME) {
+        ReplyToCommand(client, "\x01[Mix] \x03Captain selection is only available before the draft starts!");
+        return Plugin_Handled;
     }
     
     if (g_iCaptain1 == -1) {
@@ -683,18 +854,18 @@ public Action Command_Captain(int client, int args) {
             GetClientName(client, g_sOriginalNames[client], sizeof(g_sOriginalNames[]));
         }
         char newName[MAX_NAME_LENGTH];
-        Format(newName, sizeof(newName), "%s [CAP]", g_sOriginalNames[client]);
+        Format(newName, sizeof(newName), "[CAP] %s", g_sOriginalNames[client]);
         SetClientName(client, newName);
-        PrintToChatAll("\x01[Mix] \x03%N\x01 is now the first team captain!", client);
+        PrintToChatAll("%s\x03%N\x01 is now a captain.", MIX_TAG, client);
     } else if (g_iCaptain2 == -1) {
         g_iCaptain2 = client;
         if (strlen(g_sOriginalNames[client]) == 0) {
             GetClientName(client, g_sOriginalNames[client], sizeof(g_sOriginalNames[]));
         }
         char newName[MAX_NAME_LENGTH];
-        Format(newName, sizeof(newName), "%s [CAP]", g_sOriginalNames[client]);
+        Format(newName, sizeof(newName), "[CAP] %s", g_sOriginalNames[client]);
         SetClientName(client, newName);
-        PrintToChatAll("\x01[Mix] \x03%N\x01 is now the second team captain!", client);
+        PrintToChatAll("%s\x03%N\x01 is now a captain.", MIX_TAG, client);
     } else {
         ReplyToCommand(client, "\x01[Mix] \x03There are already two captains!");
         return Plugin_Handled;
@@ -710,13 +881,6 @@ void CheckDraftStart() {
     if (g_eCurrentState != STATE_IDLE && g_eCurrentState != STATE_PRE_DRAFT) return;
     
     if (g_iCaptain1 == -1 || g_iCaptain2 == -1) {
-        if (g_iCaptain1 == -1 && g_iCaptain2 == -1) {
-            PrintToChatAll("\x01[Mix] \x03Need two captains to start drafting. Type !captain to become a captain.");
-        } else if (g_iCaptain1 == -1) {
-            PrintToChatAll("\x01[Mix] \x03Need one more captain to start drafting. Type !captain to become a captain.");
-        } else {
-            PrintToChatAll("\x01[Mix] \x03Need one more captain to start drafting. Type !captain to become a captain.");
-        }
         return;
     }
     
@@ -735,8 +899,6 @@ void CheckDraftStart() {
     // Check if we have enough players
     if (totalPlayers >= 12) {
         StartDraft();
-    } else {
-        PrintToChatAll("\x01[Mix] \x03Need at least 12 players to start drafting. Current players: %d", totalPlayers);
     }
 }
 
@@ -762,11 +924,9 @@ public Action Command_JoinTeam(int client, const char[] command, int argc) {
         return Plugin_Continue; // Allow free team switching
     }
     else if (g_eCurrentState == STATE_DRAFT) {
-        PrintToChat(client, "\x01[Mix] \x03Teams are managed by the plugin during the draft! Use !draft to pick players.");
         return Plugin_Handled;
     }
     else if (g_eCurrentState == STATE_LIVE_GAME) {
-        PrintToChat(client, "\x01[Mix] \x03Teams are locked during the live game!");
         return Plugin_Handled;
     }
     
@@ -797,30 +957,7 @@ public Action Command_Draft(int client, int args) {
         char target[32];
         GetCmdArg(1, target, sizeof(target));
         
-        int targetClient = -1;
-        char targetName[MAX_NAME_LENGTH];
-        
-        for (int i = 1; i <= MaxClients; i++) {
-            if (IsValidClient(i) && view_as<TFTeam>(GetClientTeam(i)) == TFTeam_Spectator) {
-                GetClientName(i, targetName, sizeof(targetName));
-                if (StrEqual(targetName, target, false)) {
-                    targetClient = i;
-                    break;
-                }
-            }
-        }
-        
-        if (targetClient == -1) {
-            for (int i = 1; i <= MaxClients; i++) {
-                if (IsValidClient(i) && view_as<TFTeam>(GetClientTeam(i)) == TFTeam_Spectator) {
-                    GetClientName(i, targetName, sizeof(targetName));
-                    if (StrContains(targetName, target, false) != -1) {
-                        targetClient = i;
-                        break;
-                    }
-                }
-            }
-        }
+        int targetClient = FindPlayerByName(target, 0, true);
         
         if (targetClient == -1) {
             ReplyToCommand(client, "\x01[Mix] \x03No matching players found in spectator team.");
@@ -860,31 +997,13 @@ public Action Command_Remove(int client, int args) {
         char target[32];
         GetCmdArg(1, target, sizeof(target));
         
-        int targetClient = -1;
-        char targetName[MAX_NAME_LENGTH];
-        
-        // Find player on captain's team
+        // Find player on captain's team (excluding self)
         int captainTeam = GetClientTeam(client);
-        for (int i = 1; i <= MaxClients; i++) {
-            if (IsValidClient(i) && GetClientTeam(i) == captainTeam && i != client) {
-                GetClientName(i, targetName, sizeof(targetName));
-                if (StrEqual(targetName, target, false)) {
-                    targetClient = i;
-                    break;
-                }
-            }
-        }
+        int targetClient = FindPlayerByName(target, captainTeam, false);
         
-        if (targetClient == -1) {
-            for (int i = 1; i <= MaxClients; i++) {
-                if (IsValidClient(i) && GetClientTeam(i) == captainTeam && i != client) {
-                    GetClientName(i, targetName, sizeof(targetName));
-                    if (StrContains(targetName, target, false) != -1) {
-                        targetClient = i;
-                        break;
-                    }
-                }
-            }
+        // Ensure we didn't find the captain themselves
+        if (targetClient == client) {
+            targetClient = -1;
         }
         
         if (targetClient == -1) {
@@ -1064,8 +1183,6 @@ void RemovePlayer(int captain, int target) {
     g_iCurrentPicker = (g_iCurrentPicker == 0) ? 1 : 0;
     int nextCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
     
-    PrintToChatAll("\x01[Mix] \x03%N's turn to pick! (%d picks remaining)", nextCaptain, g_iPicksRemaining);
-    
     if (IsValidClient(nextCaptain)) {
         CreateTimer(0.5, Timer_OpenDraftMenu, GetClientUserId(nextCaptain));
     }
@@ -1173,7 +1290,7 @@ public void PickPlayer(int captain, int target) {
     
     g_iPicksRemaining--;
     
-    PrintToChatAll("\x01[Mix] \x03%N has been drafted to the %s team!", target, (view_as<TFTeam>(team) == TFTeam_Red) ? "RED" : "BLU");
+    PrintToChatAll("%s\x03%N\x01 has been drafted to the %s team!", MIX_TAG, target, (view_as<TFTeam>(team) == TFTeam_Red) ? "\x07FF4444RED\x01" : "\x0744A3FFBLU\x01");
     
     // Check if teams are now complete
     GetTeamSizes(redCount, bluCount);
@@ -1191,8 +1308,6 @@ public void PickPlayer(int captain, int target) {
     
     g_iCurrentPicker = (g_iCurrentPicker == 0) ? 1 : 0;
     int nextCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
-    
-    PrintToChatAll("\x01[Mix] \x03%N's turn to pick! (%d picks remaining)", nextCaptain, g_iPicksRemaining);
     
     if (IsValidClient(nextCaptain)) {
         CreateTimer(0.5, Timer_OpenDraftMenu, GetClientUserId(nextCaptain));
@@ -1229,18 +1344,16 @@ public Action Event_PlayerTeam(Event event, const char[] name, bool dontBroadcas
     }
     else if (g_eCurrentState == STATE_DRAFT) {
         if (IsFakeClient(client)) {
-        return Plugin_Continue;
-    }
-    if (g_bPlayerLocked[client]) {
-        PrintToChat(client, "\x01[Mix] \x03You are locked to your team! Teams are managed by the plugin.");
-        CreateTimer(0.1, Timer_ForceTeam, GetClientUserId(client));
-        return Plugin_Handled;
-    }
+            return Plugin_Continue;
+        }
+        if (g_bPlayerLocked[client]) {
+            CreateTimer(0.1, Timer_ForceTeam, GetClientUserId(client));
+            return Plugin_Handled;
+        }
         if (client != g_iCaptain1 && client != g_iCaptain2) {
-        PrintToChat(client, "\x01[Mix] \x03You must wait to be drafted by a captain! Teams are managed by the plugin.");
-        CreateTimer(0.1, Timer_ForceTeam, GetClientUserId(client));
-        return Plugin_Handled;
-    }
+            CreateTimer(0.1, Timer_ForceTeam, GetClientUserId(client));
+            return Plugin_Handled;
+        }
         return Plugin_Continue;
     }
     else if (g_eCurrentState == STATE_LIVE_GAME) {
@@ -1262,38 +1375,42 @@ public Action Timer_ForceTeam(Handle timer, any userid) {
     
     // Handle based on current state
     if (g_eCurrentState == STATE_DRAFT) {
-    if (IsFakeClient(client) && g_iPicksRemaining > 0) {
-        return Plugin_Stop;
-    }
-    
-    int currentTeam = GetClientTeam(client);
-    
-    if (g_bPlayerLocked[client]) {
+        if (IsFakeClient(client) && g_iPicksRemaining > 0) {
+            return Plugin_Stop;
+        }
+        
+        int currentTeam = GetClientTeam(client);
+        
+        if (g_bPlayerLocked[client]) {
             // For locked players, ensure they're on the correct team
-            if (currentTeam == 0) { // If they're still on spectator
-                // Find which team they should be on
-        int correctTeam = -1;
+            // Priority: Use disconnection data if available (for reconnected players)
+            if (g_iDisconnectedPlayerTeam[client] > 0) {
+                if (currentTeam != g_iDisconnectedPlayerTeam[client]) {
+                    TF2_ChangeClientTeam(client, view_as<TFTeam>(g_iDisconnectedPlayerTeam[client]));
+                }
+            }
+            else if (currentTeam == 0 || currentTeam == 1) { // If they're on spectator/unassigned
+                // Find which team they should be on based on captains
+                int correctTeam = -1;
                 if (IsValidClient(g_iCaptain1)) {
-            correctTeam = GetClientTeam(g_iCaptain1);
+                    correctTeam = GetClientTeam(g_iCaptain1);
                 } else if (IsValidClient(g_iCaptain2)) {
-            correctTeam = GetClientTeam(g_iCaptain2);
+                    correctTeam = GetClientTeam(g_iCaptain2);
                 }
                 
                 if (correctTeam != -1) {
-            TF2_ChangeClientTeam(client, view_as<TFTeam>(correctTeam));
-        }
+                    TF2_ChangeClientTeam(client, view_as<TFTeam>(correctTeam));
+                }
             }
-            PrintToChat(client, "\x01[Mix] \x03You are locked to your team!");
-        return Plugin_Stop;
-    }
-    
-    if (g_iPicksRemaining > 0 && client != g_iCaptain1 && client != g_iCaptain2) {
-        if (view_as<TFTeam>(currentTeam) != TFTeam_Spectator) {
-            TF2_ChangeClientTeam(client, TFTeam_Spectator);
-            PrintToChat(client, "\x01[Mix] \x03You must wait to be drafted by a captain!");
+            return Plugin_Stop;
         }
-        return Plugin_Stop;
-    }
+        
+        if (g_iPicksRemaining > 0 && client != g_iCaptain1 && client != g_iCaptain2) {
+            if (view_as<TFTeam>(currentTeam) != TFTeam_Spectator) {
+                TF2_ChangeClientTeam(client, TFTeam_Spectator);
+            }
+            return Plugin_Stop;
+        }
     }
     else if (g_eCurrentState == STATE_LIVE_GAME) {
         // Force locked players back to their assigned team
@@ -1307,7 +1424,6 @@ public Action Timer_ForceTeam(Handle timer, any userid) {
         } else {
             // Force non-picked players to spectator
             TF2_ChangeClientTeam(client, TFTeam_Spectator);
-            PrintToChat(client, "\x01[Mix] \x03Teams are locked during the game! You must spectate.");
         }
     }
     
@@ -1319,9 +1435,9 @@ public Action Event_PlayerSpawn(Event event, const char[] name, bool dontBroadca
     if (!IsValidClient(client))
         return Plugin_Continue;
         
-    if ((client == g_iCaptain1 || client == g_iCaptain2) && !StrContains(g_sOriginalNames[client], "[CAP]")) {
+    if (client == g_iCaptain1 || client == g_iCaptain2) {
         char newName[MAX_NAME_LENGTH];
-        Format(newName, sizeof(newName), "%s [CAP]", g_sOriginalNames[client]);
+        Format(newName, sizeof(newName), "[CAP] %s", g_sOriginalNames[client]);
         SetClientName(client, newName);
     }
     
@@ -1516,9 +1632,9 @@ public Action Timer_EndPostGameVote(Handle timer) {
 
 public Action Timer_ShowDraftCompleteMessage(Handle timer) {
     if (IsKothMap()) {
-        PrintToChatAll("\x01[Mix] \x03Draft complete! Mix has started (ETF2L 6v6, KOTH - First to 4).");
+        PrintToChatAll("%s\x03Draft complete!\x01 Mix has started (ETF2L 6v6, KOTH - First to 4).", MIX_TAG);
     } else {
-        PrintToChatAll("\x01[Mix] \x03Draft complete! Mix has started (ETF2L 6v6, 5CP - First to 5).");
+        PrintToChatAll("%s\x03Draft complete!\x01 Mix has started (ETF2L 6v6, 5CP - First to 5).", MIX_TAG);
     }
     return Plugin_Stop;
 }
@@ -1535,7 +1651,7 @@ public Action Timer_ReenableDM(Handle timer) {
 
 
 void UpdateHUDForAll() {
-    char buffer[256];
+    char buffer[512];
     
     if (g_eCurrentState == STATE_IDLE) {
         Format(buffer, sizeof(buffer), "Type !captain to become a captain");
@@ -1543,7 +1659,7 @@ void UpdateHUDForAll() {
     else if (g_eCurrentState == STATE_PRE_DRAFT) {
         // Count total players
         int totalPlayers = 0;
-    for (int i = 1; i <= MaxClients; i++) {
+        for (int i = 1; i <= MaxClients; i++) {
             if (IsValidClient(i)) totalPlayers++;
         }
         Format(buffer, sizeof(buffer), "Need at least 12 players to start drafting\nCurrent players: %d", totalPlayers);
@@ -1572,7 +1688,7 @@ void UpdateHUDForAll() {
                 strcopy(captainName, sizeof(captainName), "Second Captain");
             }
             
-            Format(buffer, sizeof(buffer), "DRAFT PAUSED\n%s disconnected!\nReplacement needed: %.0fs", captainName, timeLeft);
+            Format(buffer, sizeof(buffer), "DRAFT PAUSED\n%s dropped!\nReplacement needed: %.0fs", captainName, timeLeft);
         }
         else if (g_iPicksRemaining > 0) {
             int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
@@ -1591,8 +1707,19 @@ void UpdateHUDForAll() {
             int redTeamSize, bluTeamSize;
             GetTeamSizes(redTeamSize, bluTeamSize);
             
-            Format(buffer, sizeof(buffer), "DRAFT IN PROGRESS\n%s's turn to pick\nTime: %.0fs\nRED: %d/%d | BLU: %d/%d", 
-                   captainName, timeLeft, redTeamSize, TEAM_SIZE, bluTeamSize, TEAM_SIZE);
+            // Highlight the team whose turn it is to pick
+            int captainTeam = GetClientTeam(currentCaptain);
+            char redStr[32], bluStr[32];
+            if (captainTeam == 2) { // RED team picking
+                Format(redStr, sizeof(redStr), "[RED %d/%d]", redTeamSize, TEAM_SIZE);
+                Format(bluStr, sizeof(bluStr), "BLU %d/%d", bluTeamSize, TEAM_SIZE);
+            } else { // BLU team picking
+                Format(redStr, sizeof(redStr), "RED %d/%d", redTeamSize, TEAM_SIZE);
+                Format(bluStr, sizeof(bluStr), "[BLU %d/%d]", bluTeamSize, TEAM_SIZE);
+            }
+            
+            Format(buffer, sizeof(buffer), "DRAFT IN PROGRESS\n%s's pick\nTime: %.0fs\n%s - %s", 
+                   captainName, timeLeft, redStr, bluStr);
         }
         else if (g_iCountdownSeconds > 0) {
             Format(buffer, sizeof(buffer), "GAME STARTING IN %d SECONDS...", g_iCountdownSeconds);
@@ -1625,29 +1752,33 @@ public Action Timer_Tips(Handle timer) {
     
     // Only show tips during idle and pre-draft states
     if (g_eCurrentState == STATE_IDLE || g_eCurrentState == STATE_PRE_DRAFT) {
-        const int TIP_COUNT = 4;
-        char tip[192];
+        const int TIP_COUNT = 3;
+        char tip[128];
         switch (g_iTipIndex % TIP_COUNT) {
-            case 0: strcopy(tip, sizeof(tip), "\x07FFFFFFUse \x0700FF00!captain \x07FFFFFFto volunteer or drop yourself as captain.");
-            case 1: strcopy(tip, sizeof(tip), "\x07FFFFFFUse \x0700FF00!pick \x07FFFFFFto open the draft menu or use \x0700FF00!pick playername\x07FFFFFF.");
-            case 2: strcopy(tip, sizeof(tip), "\x07FFFFFFUse \x0700FF00!remove \x07FFFFFFto open the remove menu or use \x0700FF00!remove playername\x07FFFFFF.");
-            case 3: strcopy(tip, sizeof(tip), "\x07FFFFFFUse \x0700FF00!helpmix \x07FFFFFFor \x0700FF00!help \x07FFFFFFto see all available commands.");
+            case 0: strcopy(tip, sizeof(tip), "\x03!captain \x01- Volunteer/drop as captain");
+            case 1: strcopy(tip, sizeof(tip), "\x03!pick <name> \x01- Draft a player");
+            case 2: strcopy(tip, sizeof(tip), "\x03!help \x01- Show commands");
         }
         g_iTipIndex++;
         
         for (int i = 1; i <= MaxClients; i++) {
             if (IsValidClient(i) && !IsFakeClient(i)) {
-                PrintToChat(i, "\x01[Mix] \x03%s", tip);
+                PrintToChat(i, "%s%s", MIX_TAG, tip);
             }
         }
     }
     
-        return Plugin_Continue;
-    }
+    return Plugin_Continue;
+}
     
 
 public Action Timer_GracePeriod(Handle timer) {
-    if (g_eCurrentState != STATE_DRAFT || g_iMissingCaptain == -1) {
+    if (g_eCurrentState != STATE_DRAFT) {
+        return Plugin_Stop;
+    }
+    
+    // If grace timer is still running but no missing captain, it means replacement was found
+    if (g_iMissingCaptain == -1) {
         return Plugin_Stop;
     }
     
@@ -1655,7 +1786,6 @@ public Action Timer_GracePeriod(Handle timer) {
     float timeLeft = g_cvGracePeriod.FloatValue - (currentTime - g_fPickTimerStartTime);
     
     if (timeLeft <= 0.0) {
-        PrintToChatAll("\x01[Mix] \x03Grace period expired. Cancelling mix.");
         SetMixState(STATE_IDLE);
         return Plugin_Stop;
     }
@@ -1679,7 +1809,6 @@ void StartGracePeriod(int missingCaptain) {
     
     // Check if both captains are now missing
     if (g_iCaptain1 == -1 && g_iCaptain2 == -1) {
-        PrintToChatAll("\x01[Mix] \x03Both captains have left! Cancelling mix.");
         SetMixState(STATE_IDLE);
         return;
     }
@@ -1689,7 +1818,6 @@ void StartGracePeriod(int missingCaptain) {
     
     // If already in grace period for different captain, both are now gone
     if (g_iMissingCaptain != -1) {
-        PrintToChatAll("\x01[Mix] \x03Both captains have left! Cancelling mix.");
         SetMixState(STATE_IDLE);
         return;
     }
@@ -1716,12 +1844,12 @@ void StartGracePeriod(int missingCaptain) {
     
     // Ensure HUD timer is running
     if (g_hHudTimer == INVALID_HANDLE) {
-    g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
+        g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
     }
     
     UpdateHUDForAll();
     
-    PrintToChatAll("\x01[Mix] \x03A captain has left! You have %.0f seconds to type !captain to replace them.", g_cvGracePeriod.FloatValue);
+    PrintToChatAll("%s\x07FF4444Captain left!\x01 Type !captain to replace (\x03%.0fs\x01).", MIX_TAG, g_cvGracePeriod.FloatValue);
 }
 
 void ResumeDraft() {
@@ -1740,21 +1868,22 @@ void ResumeDraft() {
         g_iCountdownSeconds = g_iSavedCountdownSeconds;
         g_iSavedCountdownSeconds = 0;
         g_hCountdownTimer = CreateTimer(1.0, Timer_Countdown, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
-        PrintToChatAll("\x01[Mix] \x03Draft resumed! Countdown continues from %d seconds.", g_iCountdownSeconds);
     } else {
-        // Resume pick timer
+        // Resume pick timer with fresh timeout
         KillTimerSafely(g_hPickTimer);
+        g_fPickTimerStartTime = GetGameTime();
         g_hPickTimer = CreateTimer(g_cvPickTimeout.FloatValue, Timer_PickTimeout);
         
+        // Open draft menu for current captain
         int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
-        if (IsValidClient(currentCaptain)) {
-            PrintToChatAll("\x01[Mix] \x03Draft resumed! %N's turn to pick (%d picks remaining).", currentCaptain, g_iPicksRemaining);
+        if (IsValidClient(currentCaptain) && !IsFakeClient(currentCaptain)) {
+            CreateTimer(0.5, Timer_OpenDraftMenu, GetClientUserId(currentCaptain));
         }
     }
     
     // Ensure HUD timer is running
     if (g_hHudTimer == INVALID_HANDLE) {
-    g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
+        g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
     }
     
     UpdateHUDForAll();
@@ -1794,8 +1923,8 @@ public Action Command_RestartDraft(int client, int args) {
         return Plugin_Handled;
     }
     
-    // Calculate 2/3 (66.67%) requirement (minimum 1 for solo testing)
-    int requiredVotes = RoundToCeil(float(totalPlayers) * 0.6667);
+    // Calculate 2/3 requirement (minimum 1 for solo testing)
+    int requiredVotes = RoundToCeil(float(totalPlayers) * (2.0 / 3.0));
     if (requiredVotes < 1) requiredVotes = 1;
     
     // Check if already voted
@@ -1823,7 +1952,7 @@ public Action Command_RestartDraft(int client, int args) {
         PrintToChatAll("\x01[Mix] \x03Vote passed! Resetting mix...");
         
         // Reset votes
-    for (int i = 1; i <= MaxClients; i++) {
+        for (int i = 1; i <= MaxClients; i++) {
             g_bRestartVote[i] = false;
         }
         KillTimerSafely(g_hRestartVoteResetTimer);
@@ -1966,6 +2095,7 @@ void KillAllTimers() {
     KillTimerSafely(g_hCountdownTimer);
     KillTimerSafely(g_hTipsTimer);
     KillTimerSafely(g_hNotificationTimer);
+    KillTimerSafely(g_hRestartVoteResetTimer);
 }
 
 
@@ -1988,30 +2118,7 @@ public Action Command_SetCaptain(int client, int args) {
     char target[32];
     GetCmdArg(1, target, sizeof(target));
     
-    int targetClient = -1;
-    char targetName[MAX_NAME_LENGTH];
-    
-    for (int i = 1; i <= MaxClients; i++) {
-        if (IsValidClient(i)) {
-            GetClientName(i, targetName, sizeof(targetName));
-            if (StrEqual(targetName, target, false)) {
-                targetClient = i;
-                break;
-            }
-        }
-    }
-    
-    if (targetClient == -1) {
-        for (int i = 1; i <= MaxClients; i++) {
-            if (IsValidClient(i)) {
-                GetClientName(i, targetName, sizeof(targetName));
-                if (StrContains(targetName, target, false) != -1) {
-                    targetClient = i;
-                    break;
-                }
-            }
-        }
-    }
+    int targetClient = FindPlayerByName(target, 0, false);
     
     if (targetClient == -1) {
         ReplyToCommand(client, "\x01[Mix] \x03Could not find target player.");
@@ -2025,16 +2132,12 @@ public Action Command_SetCaptain(int client, int args) {
             if (g_eCurrentState == STATE_DRAFT) {
                 StartGracePeriod(0);
             }
-            ReplyToCommand(client, "\x01[Mix] \x03Removed %N's first captain status.", targetClient);
-            PrintToChat(targetClient, "\x01[Mix] \x03Your first captain status has been removed by an admin.");
         } else {
             g_iCaptain2 = -1;
             SetClientName(targetClient, g_sOriginalNames[targetClient]);
             if (g_eCurrentState == STATE_DRAFT) {
                 StartGracePeriod(1);
             }
-            ReplyToCommand(client, "\x01[Mix] \x03Removed %N's second captain status.", targetClient);
-            PrintToChat(targetClient, "\x01[Mix] \x03Your second captain status has been removed by an admin.");
         }
         return Plugin_Handled;
     }
@@ -2050,22 +2153,29 @@ public Action Command_SetCaptain(int client, int args) {
             GetClientName(targetClient, g_sOriginalNames[targetClient], sizeof(g_sOriginalNames[]));
         }
         char newName[MAX_NAME_LENGTH];
-        Format(newName, sizeof(newName), "%s [CAP]", g_sOriginalNames[targetClient]);
+        Format(newName, sizeof(newName), "[CAP] %s", g_sOriginalNames[targetClient]);
         SetClientName(targetClient, newName);
-        PrintToChatAll("\x01[Mix] \x03%N\x01 is now the first team captain!", targetClient);
-        ReplyToCommand(client, "\x01[Mix] \x03Set %N as the first captain.", targetClient);
-        PrintToChat(targetClient, "\x01[Mix] \x03You have been set as the first captain by an admin!");
+        // Force slot team during draft/pre-draft
+        if (g_eCurrentState == STATE_DRAFT || g_eCurrentState == STATE_PRE_DRAFT) {
+            TF2_ChangeClientTeam(targetClient, TFTeam_Red);
+            g_bPlayerLocked[targetClient] = true;
+            g_bPlayerPicked[targetClient] = true;
+        }
+        PrintToChatAll("%s\x03%N\x01 is now a captain.", MIX_TAG, targetClient);
     } else {
         g_iCaptain2 = targetClient;
         if (strlen(g_sOriginalNames[targetClient]) == 0) {
             GetClientName(targetClient, g_sOriginalNames[targetClient], sizeof(g_sOriginalNames[]));
         }
         char newName[MAX_NAME_LENGTH];
-        Format(newName, sizeof(newName), "%s [CAP]", g_sOriginalNames[targetClient]);
+        Format(newName, sizeof(newName), "[CAP] %s", g_sOriginalNames[targetClient]);
         SetClientName(targetClient, newName);
-        PrintToChatAll("\x01[Mix] \x03%N\x01 is now the second team captain!", targetClient);
-        ReplyToCommand(client, "\x01[Mix] \x03Set %N as the second captain.", targetClient);
-        PrintToChat(targetClient, "\x01[Mix] \x03You have been set as the second captain by an admin!");
+        if (g_eCurrentState == STATE_DRAFT || g_eCurrentState == STATE_PRE_DRAFT) {
+            TF2_ChangeClientTeam(targetClient, TFTeam_Blue);
+            g_bPlayerLocked[targetClient] = true;
+            g_bPlayerPicked[targetClient] = true;
+        }
+        PrintToChatAll("%s\x03%N\x01 is now a captain.", MIX_TAG, targetClient);
     }
     
     CheckDraftStart();
@@ -2095,31 +2205,8 @@ public Action Command_AdminPick(int client, int args) {
     char target[32];
     GetCmdArg(1, target, sizeof(target));
     
-    int targetClient = -1;
-    char targetName[MAX_NAME_LENGTH];
+    int targetClient = FindPlayerByName(target, 0, true);
     
-    for (int i = 1; i <= MaxClients; i++) {
-        if (IsValidClient(i) && view_as<TFTeam>(GetClientTeam(i)) == TFTeam_Spectator) {
-            GetClientName(i, targetName, sizeof(targetName));
-            if (StrEqual(targetName, target, false)) {
-                targetClient = i;
-                break;
-            }
-        }
-    }
-    
-    if (targetClient == -1) {
-        for (int i = 1; i <= MaxClients; i++) {
-            if (IsValidClient(i) && view_as<TFTeam>(GetClientTeam(i)) == TFTeam_Spectator) {
-                GetClientName(i, targetName, sizeof(targetName));
-                if (StrContains(targetName, target, false) != -1) {
-                    targetClient = i;
-                    break;
-                }
-            }
-        }
-    }
-        
     if (targetClient == -1) {
         ReplyToCommand(client, "\x01[Mix] \x03No matching players found in spectator team.");
         return Plugin_Handled;
@@ -2147,7 +2234,7 @@ public Action Command_AdminPick(int client, int args) {
     
     g_iPicksRemaining--;
     
-    PrintToChatAll("\x01[Mix] \x03Admin %N has picked %N for the %s team!", client, targetClient, (view_as<TFTeam>(team) == TFTeam_Red) ? "RED" : "BLU");
+    PrintToChatAll("%s\x03Admin %N\x01 has picked \x03%N\x01 for the %s team!", MIX_TAG, client, targetClient, (view_as<TFTeam>(team) == TFTeam_Red) ? "\x07FF4444RED\x01" : "\x0744A3FFBLU\x01");
     
     // Check if teams are now complete
     GetTeamSizes(redCount, bluCount);
@@ -2240,8 +2327,9 @@ public Action Timer_PickTimeout(Handle timer) {
         if (IsValidClient(nextCaptain)) {
             PrintToChatAll("\x01[Mix] \x03%N's team is full! Skipping to %N's turn.", currentCaptain, nextCaptain);
             CreateTimer(0.5, Timer_OpenDraftMenu, GetClientUserId(nextCaptain));
-        KillTimerSafely(g_hPickTimer);
-            g_hPickTimer = CreateTimer(g_cvPickTimeout.FloatValue, Timer_PickTimeout);
+            // Start new timer for next captain (current timer will be cleaned up by Plugin_Stop)
+            g_hPickTimer = INVALID_HANDLE; // Mark as invalid before Plugin_Stop cleans it up
+            CreateTimer(0.1, Timer_StartNewPickTimer); // Start new timer after this callback ends
             g_fPickTimerStartTime = GetGameTime();
         } else {
             EndDraft();
@@ -2252,10 +2340,10 @@ public Action Timer_PickTimeout(Handle timer) {
     // Auto-pick random player
     int randomPlayer = FindNextAvailablePlayer();
     if (randomPlayer != -1) {
-        PrintToChatAll("\x01[Mix] \x03Pick timed out! Auto-picking %N.", randomPlayer);
+        // Mark timer as invalid before calling PickPlayer to prevent double-free
+        g_hPickTimer = INVALID_HANDLE;
         PickPlayer(currentCaptain, randomPlayer);
     } else {
-        PrintToChatAll("\x01[Mix] \x03Pick timed out! No players available. Ending draft.");
         EndDraft();
     }
     
@@ -2277,6 +2365,14 @@ public Action Timer_OpenDraftMenu(Handle timer, any userid) {
     
     ShowDraftMenu(client);
     
+    return Plugin_Stop;
+}
+
+public Action Timer_StartNewPickTimer(Handle timer) {
+    // Start new pick timer (called after previous timer callback ends)
+    if (g_eCurrentState == STATE_DRAFT && g_hPickTimer == INVALID_HANDLE) {
+        g_hPickTimer = CreateTimer(g_cvPickTimeout.FloatValue, Timer_PickTimeout);
+    }
     return Plugin_Stop;
 }
 
@@ -2435,13 +2531,18 @@ void EnsureETF2LWhitelist() {
         file.WriteLine(line);
     }
     file.WriteLine("}");
-    CloseHandle(file);
+    delete file;
 }
 
+// Silent cvar setters to avoid chat spam
 void SetCvarInt(const char[] name, int value) {
     ConVar c = FindConVar(name);
     if (c != null) {
+        // Temporarily remove FCVAR_NOTIFY to suppress chat spam
+        int flags = c.Flags;
+        c.Flags &= ~FCVAR_NOTIFY;
         SetConVarInt(c, value);
+        c.Flags = flags; // Restore original flags
     } else {
         char cmd[64];
         Format(cmd, sizeof(cmd), "%s %d", name, value);
@@ -2449,13 +2550,48 @@ void SetCvarInt(const char[] name, int value) {
     }
 }
 
+void ServerCommandSilent(const char[] cmd) {
+    // Parse command to extract cvar name
+    char parts[2][64];
+    int count = ExplodeString(cmd, " ", parts, 2, 64);
+    
+    if (count >= 1) {
+        ConVar c = FindConVar(parts[0]);
+        if (c != null) {
+            int flags = c.Flags;
+            c.Flags &= ~FCVAR_NOTIFY;
+            ServerCommand(cmd);
+            c.Flags = flags;
+            return;
+        }
+    }
+    
+    // Fallback to normal command if cvar not found
+    ServerCommand(cmd);
+}
+
 void SetCvarString(const char[] name, const char[] value) {
     ConVar c = FindConVar(name);
     if (c != null) {
+        // Temporarily remove FCVAR_NOTIFY to suppress chat spam
+        int flags = c.Flags;
+        c.Flags &= ~FCVAR_NOTIFY;
         SetConVarString(c, value);
+        c.Flags = flags; // Restore original flags
     } else {
+        // Escape quotes to prevent command injection
+        char escapedValue[512];
+        int j = 0;
+        for (int i = 0; i < strlen(value) && j < sizeof(escapedValue) - 2; i++) {
+            if (value[i] == '"' || value[i] == '\\') {
+                escapedValue[j++] = '\\';
+            }
+            escapedValue[j++] = value[i];
+        }
+        escapedValue[j] = '\0';
+        
         char cmd[512];
-        Format(cmd, sizeof(cmd), "%s \"%s\"", name, value);
+        Format(cmd, sizeof(cmd), "%s \"%s\"", name, escapedValue);
         ServerCommand(cmd);
     }
 }
@@ -2489,16 +2625,15 @@ void StartCountdown() {
     if (g_iCountdownSeconds > 0) return;
     
     g_iCountdownSeconds = 10;
+    g_bPreStartedTournament = false;
     
     // Kill any existing pick timer
     KillTimerSafely(g_hPickTimer);
     
     // Ensure HUD timer is running for countdown display
     if (g_hHudTimer == INVALID_HANDLE) {
-    g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
+        g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
     }
-    
-    PrintToChatAll("\x01[Mix] \x03Teams are complete! Game starting in 10 seconds...");
     
     g_hCountdownTimer = CreateTimer(1.0, Timer_Countdown, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     UpdateHUDForAll();
@@ -2509,8 +2644,6 @@ void StopCountdown() {
     
     g_iCountdownSeconds = 0;
     KillTimerSafely(g_hCountdownTimer);
-    
-    PrintToChatAll("\x01[Mix] \x03Countdown cancelled - draft continues!");
     UpdateHUDForAll();
 }
 
@@ -2523,9 +2656,17 @@ public Action Timer_Countdown(Handle timer) {
         // Teams became unbalanced, stop countdown
         g_hCountdownTimer = INVALID_HANDLE;
         g_iCountdownSeconds = 0;
-        PrintToChatAll("\x01[Mix] \x03Teams became unbalanced! Countdown cancelled.");
-    return Plugin_Stop;
-}
+        return Plugin_Stop;
+    }
+
+    // Kick off tournament restart at 6 seconds to sync with countdown
+    if (g_iCountdownSeconds == 6 && !g_bPreStartedTournament) {
+        // Apply live game cvars early and start tournament restart
+        ApplyLiveGameStateCvars();
+        ServerCommand("mp_tournament_restart");
+        CreateTimer(0.5, Timer_ForceTeamsReady);
+        g_bPreStartedTournament = true;
+    }
 
     g_iCountdownSeconds--;
     
@@ -2541,7 +2682,7 @@ public Action Timer_Countdown(Handle timer) {
 
 public Action Timer_ShowInfoCard(Handle timer) {
     PrintToServer("+----------------------------------------------+");
-    PrintToServer("|               TF2-Mixes v0.3.0               |");
+    PrintToServer("|               TF2-Mixes v0.3.1               |");
     PrintToServer("|     vexx-sm | Type !helpmix for commands     |");
     PrintToServer("+----------------------------------------------+");
 
@@ -2556,35 +2697,38 @@ public Action Timer_CheckDMModule(Handle timer) {
     
     if (plugin != null && GetPluginStatus(plugin) == Plugin_Running) {
         g_bDMPluginLoaded = true;
-        PrintToServer("   DM module detected - DM features available");
+        if (!g_bDMAnnounced) {
+            PrintToServer("   DM module detected - DM features available");
+            g_bDMAnnounced = true;
+        }
         // Enable DM for pre-draft phase immediately
         DM_SetPreGameActive(true);
     } else {
-        PrintToServer("   DM module not found - DM features disabled");
+        if (!g_bDMAnnounced) {
+            PrintToServer("   DM module not found - DM features disabled");
+            g_bDMAnnounced = true;
+        }
     }
     
     return Plugin_Stop;
 }
 
 void ShowHelpMenu(int client) {
-    PrintToChat(client, "\x01[Mix] \x07FFFFFFPlayer Commands:");
-    PrintToChat(client, "\x01[Mix] \x0700FF00!captain / !cap \x07FFFFFF- Become or resign as captain");
-    PrintToChat(client, "\x01[Mix] \x0700FF00!draft / !pick \x07FFFFFF- Draft a player (captains only)");
-    PrintToChat(client, "\x01[Mix] \x0700FF00!remove \x07FFFFFF- Remove a player from your team (captains only)");
-    PrintToChat(client, "\x01[Mix] \x0700FF00!restart / !redraft \x07FFFFFF- Vote to restart mix (2/3 required)");
-    PrintToChat(client, "\x01[Mix] \x0700FF00!helpmix / !help \x07FFFFFF- Show this help menu");
-    PrintToChat(client, "\x01[Mix] \x0700FF00!mixversion \x07FFFFFF- Show plugin version");
+    PrintToChat(client, "%s\x03=== Player Commands ===", MIX_TAG);
+    PrintToChat(client, "%s\x03!captain\x01 (!cap) - Volunteer/drop as captain", MIX_TAG);
+    PrintToChat(client, "%s\x03!pick <name>\x01 (!draft, !p) - Draft a player", MIX_TAG);
+    PrintToChat(client, "%s\x03!remove <name>\x01 (!rm, !kick) - Remove from team", MIX_TAG);
+    PrintToChat(client, "%s\x03!restart\x01 (!redraft) - Vote to restart mix", MIX_TAG);
+    PrintToChat(client, "%s\x03!help\x01 - Show this menu", MIX_TAG);
     
-    // Only show admin commands to admins
     if (CheckCommandAccess(client, "sm_kick", ADMFLAG_KICK)) {
-        PrintToChat(client, "\x01[Mix] \x07FFFFFFAdmin Commands:");
-        PrintToChat(client, "\x01[Mix] \x07FF0000!setcaptain / !setcap \x07FFFFFF- Set a player as captain");
-        PrintToChat(client, "\x01[Mix] \x07FF0000!adminpick \x07FFFFFF- Force pick a player");
-        PrintToChat(client, "\x01[Mix] \x07FF0000!autodraft \x07FFFFFF- Auto-draft remaining players");
-        PrintToChat(client, "\x01[Mix] \x07FF0000!outline \x07FFFFFF- Toggle teammate outlines");
-        PrintToChat(client, "\x01[Mix] \x07FF0000!rup \x07FFFFFF- Force teams ready");
-        PrintToChat(client, "\x01[Mix] \x07FF0000!cancelmix \x07FFFFFF- Cancel current mix");
-        PrintToChat(client, "\x01[Mix] \x07FF0000!updatemix / !mixupdate \x07FFFFFF- Update plugin (root only)");
+        PrintToChat(client, "%s\x07FF4444=== Admin Commands ===", MIX_TAG);
+        PrintToChat(client, "%s\x07FF4444!setcaptain <name>\x01 - Set/remove captain", MIX_TAG);
+        PrintToChat(client, "%s\x07FF4444!adminpick <name>\x01 - Force pick player", MIX_TAG);
+        PrintToChat(client, "%s\x07FF4444!autodraft\x01 - Auto-draft remaining", MIX_TAG);
+        PrintToChat(client, "%s\x07FF4444!cancelmix\x01 (!cancel) - Cancel mix", MIX_TAG);
+        PrintToChat(client, "%s\x07FF4444!outline\x01 - Toggle teammate outlines", MIX_TAG);
+        PrintToChat(client, "%s\x07FF4444!mixtest\x01 - Quick test setup", MIX_TAG);
     }
 }
 
@@ -2600,8 +2744,6 @@ public Action Command_ToggleOutlines(int client, int args) {
     g_bOutlinesEnabled = !g_bOutlinesEnabled;
     ToggleTeamOutlines(g_bOutlinesEnabled);
     
-    PrintToChatAll("\x01[Mix] \x03%N has %s teammate outlines for all players!", client, g_bOutlinesEnabled ? "enabled" : "disabled");
-    
     return Plugin_Handled;
 }
 
@@ -2613,8 +2755,6 @@ public Action Command_ForceReadyUp(int client, int args) {
         ReplyToCommand(client, "\x01[Mix] \x03You do not have permission to use this command!");
         return Plugin_Handled;
     }
-    
-    PrintToChatAll("\x01[Mix] \x03%N is forcing both teams ready!", client);
     
     // Force both teams to ready state
     GameRules_SetProp("m_bTeamReady", 1, .element=2);
@@ -2640,7 +2780,7 @@ void ToggleTeamOutlines(bool enabled) {
 // ========================================
 
 // Update system variables
-char g_sCurrentVersion[32] = "0.3.0";
+char g_sCurrentVersion[32] = "0.3.1";
 char g_sLatestVersion[32];
 char g_sUpdateURL[256];
 bool g_bUpdateAvailable = false;
@@ -2712,28 +2852,16 @@ public void OnUpdateCheck(Handle hRequest, bool bFailure, bool bRequestSuccessfu
 void ParseGitHubResponse(const char[] response) {
     char tagName[64];
     char downloadUrl[256];
-    int tagStart = StrContains(response, "\"tag_name\":\"");
-    if (tagStart != -1) {
-        tagStart += 12;
-        int tagEnd = StrContains(response[tagStart], "\"");
-        if (tagEnd != -1) {
-            strcopy(tagName, sizeof(tagName), response[tagStart]);
-            tagName[tagEnd] = '\0';
-        }
+    
+    // Parse tag_name with bounds checking
+    if (!ExtractJSONString(response, "tag_name", tagName, sizeof(tagName))) {
+        LogError("[Mix] Failed to parse tag_name from GitHub response");
+        return;
     }
     
-    int urlStart = StrContains(response, "\"browser_download_url\":\"");
-    if (urlStart != -1) {
-        urlStart += 25;
-        int urlEnd = StrContains(response[urlStart], "\"");
-        if (urlEnd != -1) {
-            strcopy(downloadUrl, sizeof(downloadUrl), response[urlStart]);
-            downloadUrl[urlEnd] = '\0';
-        }
-    }
-    
-    if (strlen(tagName) == 0) {
-        LogError("[Mix] Could not find tag_name in response");
+    // Find the first browser_download_url that ends with .smx
+    if (!FindAssetUrlWithSuffix(response, ".smx", downloadUrl, sizeof(downloadUrl))) {
+        LogMessage("[Mix] No .smx asset found in latest release - skipping auto-update");
         return;
     }
     
@@ -2748,20 +2876,75 @@ void ParseGitHubResponse(const char[] response) {
         return;
     }
     
-    if (strlen(downloadUrl) == 0) {
-        LogError("[Mix] No download URL found in response");
-        return;
-    }
-    
     strcopy(g_sUpdateURL, sizeof(g_sUpdateURL), downloadUrl);
     g_bUpdateAvailable = true;
     StartUpdateNotifications();
     LogMessage("[Mix] Update available: v%s -> v%s | Use 'sm_updatemix' to download and install", g_sCurrentVersion, g_sLatestVersion);
 }
 
+bool FindAssetUrlWithSuffix(const char[] response, const char[] suffix, char[] output, int maxlen) {
+    char pattern[32] = "\"browser_download_url\":\"";
+    int pos = 0;
+    int totalLen = strlen(response);
+    
+    while (pos >= 0 && pos < totalLen) {
+        int relStart = StrContains(response[pos], pattern);
+        if (relStart == -1) {
+            return false;
+        }
+        int start = pos + relStart + strlen(pattern);
+        if (start >= totalLen) {
+            return false;
+        }
+        int end = StrContains(response[start], "\"");
+        if (end == -1) {
+            return false;
+        }
+        
+        int copyLen = (end < maxlen - 1) ? end : maxlen - 1;
+        for (int i = 0; i < copyLen; i++) {
+            output[i] = response[start + i];
+        }
+        output[copyLen] = '\0';
+        
+        if (StrContains(output, suffix, false) != -1) {
+            return true;
+        }
+        
+        // Continue searching after this URL
+        pos = start + end + 1;
+    }
+
+    return false;
+}
+
+bool ExtractJSONString(const char[] json, const char[] key, char[] output, int maxlen) {
+    char searchPattern[128];
+    // Look for pattern like: "key":"
+    Format(searchPattern, sizeof(searchPattern), "\"%s\":\"", key);
+    
+    int start = StrContains(json, searchPattern);
+    if (start == -1) return false;
+    
+    start += strlen(searchPattern);
+    int end = StrContains(json[start], "\"");
+    
+    // Bounds checking to prevent buffer overflow
+    if (end == -1 || end >= maxlen - 1) return false;
+    
+    // Safe copy with bounds check
+    int copyLen = (end < maxlen - 1) ? end : maxlen - 1;
+    for (int i = 0; i < copyLen; i++) {
+        output[i] = json[start + i];
+    }
+    output[copyLen] = '\0';
+    
+    return true;
+}
+
 void StartUpdateNotifications() {
     if (g_hNotificationTimer != INVALID_HANDLE) {
-        KillTimer(g_hNotificationTimer);
+        KillTimerSafely(g_hNotificationTimer);
     }
     
     g_hNotificationTimer = CreateTimer(160.0, Timer_NotifyAdmins, _, TIMER_REPEAT);
@@ -2771,8 +2954,7 @@ void StartUpdateNotifications() {
 void NotifyAdminsOfUpdate() {
     for (int i = 1; i <= MaxClients; i++) {
         if (IsValidClient(i) && CheckCommandAccess(i, "sm_updatemix", ADMFLAG_ROOT)) {
-            PrintToChat(i, "\x01[Mix] \x03Update available: v%s -> v%s", g_sCurrentVersion, g_sLatestVersion);
-            PrintToChat(i, "\x01[Mix] \x03Use \x0700FF00!updatemix \x03to download and install");
+            PrintToChat(i, "%s\x03Update v%s available - use !updatemix", MIX_TAG, g_sLatestVersion);
         }
     }
 }
@@ -2969,17 +3151,73 @@ int CompareVersions(const char[] version1, const char[] version2) {
 public Action Command_MixVersion(int client, int args) {
     if (!IsValidClient(client)) return Plugin_Handled;
     
-    ReplyToCommand(client, "\x01[Mix] \x03Current version: v%s", g_sCurrentVersion);
+    ReplyToCommand(client, "\\x01[Mix] \\x03Current version: v%s", g_sCurrentVersion);
     
     // Check if SteamWorks is available
     if (!STEAMWORKS_AVAILABLE()) {
-        ReplyToCommand(client, "\x01[Mix] \x03Auto-update disabled - SteamWorks not available");
-        ReplyToCommand(client, "\x01[Mix] \x03SteamWorks should be installed by default with SourceMod");
+        ReplyToCommand(client, "\\x01[Mix] \\x03Auto-update disabled - SteamWorks not available");
+        ReplyToCommand(client, "\\x01[Mix] \\x03SteamWorks should be installed by default with SourceMod");
     } else {
-        ReplyToCommand(client, "\x01[Mix] \x03Auto-update system ready (SteamWorks available)");
+        ReplyToCommand(client, "\\x03Auto-update system ready (SteamWorks available)");
     }
     
     return Plugin_Handled;
+}
+
+public Action Command_MixTest(int client, int args) {
+    if (!IsValidClient(client)) return Plugin_Handled;
+    
+    if (!CheckCommandAccess(client, "sm_mixtest", ADMFLAG_GENERIC)) {
+        ReplyToCommand(client, "\\x01[Mix] \\x03You do not have permission to use this command!");
+        return Plugin_Handled;
+    }
+    
+    PrintToChat(client, "\\x01[Mix] \\x03Setting up test environment...");
+    
+    // Step 1: Enable cheats
+    ServerCommand("sv_cheats 1");
+    PrintToChat(client, "\\x01[Mix] \\x03✓ Cheats enabled");
+    
+    // Step 2: Add 11 numbered bots via 'bot' command (works best for testing)
+    for (int i = 0; i < 11; i++) {
+        ServerCommand("bot");
+    }
+    PrintToChat(client, "\\x01[Mix] \\x03✓ Added 11 bots (via 'bot')");
+    
+    // Step 3: Set you as captain (with delay to allow bots to connect)
+    CreateTimer(2.0, Timer_SetTestCaptain, GetClientUserId(client));
+    PrintToChat(client, "\\x01[Mix] \\x03✓ You will be set as first captain in 2 seconds...");
+    
+    return Plugin_Handled;
+}
+
+public Action Timer_SetTestCaptain(Handle timer, any userid) {
+    int client = GetClientOfUserId(userid);
+    
+    if (!IsValidClient(client)) {
+        return Plugin_Stop;
+    }
+    
+    // Reset to idle first to clear any existing state
+    SetMixState(STATE_IDLE);
+    
+    // Set as first captain
+    g_iCaptain1 = client;
+    if (strlen(g_sOriginalNames[client]) == 0) {
+        GetClientName(client, g_sOriginalNames[client], sizeof(g_sOriginalNames[]));
+    }
+    
+    char newName[MAX_NAME_LENGTH];
+    Format(newName, sizeof(newName), "[CAP] %s", g_sOriginalNames[client]);
+    SetClientName(client, newName);
+    
+    PrintToChatAll("\\x01[Mix] \\x03%N is now the first team captain!", client);
+    PrintToChat(client, "\\x01[Mix] \\x03Test setup complete! Need 1 more captain to start draft.");
+    
+    // Transition to PRE_DRAFT state
+    SetMixState(STATE_PRE_DRAFT);
+    
+    return Plugin_Stop;
 }
 
 
@@ -3010,14 +3248,3 @@ void DM_StopAllFeatures() {
 // END MIX UPDATE SYSTEM
 // ========================================
 
-public void OnPluginEnd() {
-    // Clean up all timers
-    KillTimerSafely(g_hPickTimer);
-    KillTimerSafely(g_hHudTimer);
-    KillTimerSafely(g_hTipsTimer);
-    KillTimerSafely(g_hGraceTimer);
-    KillTimerSafely(g_hVoteTimer);
-    KillTimerSafely(g_hCountdownTimer);
-    KillTimerSafely(g_hNotificationTimer);
-    KillTimerSafely(g_hRestartVoteResetTimer);
-}
