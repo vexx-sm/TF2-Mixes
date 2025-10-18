@@ -15,11 +15,12 @@ https://github.com/user-attachments/assets/c4f7fb5f-11e5-462c-bfda-3497f4b0330c
 - Players use `!captain` or `!cap` to become (or drop as) a captain.  
 - Once two captains are selected **and at least 12 players are present**, all others are moved to spectator.
 - Captains are randomly assigned to RED or BLU.  
-<img align="right" width="410" height="190" alt="Status" src="https://github.com/user-attachments/assets/83262fd7-8ab8-4f1f-bae7-6769ea998560" />
 
 ### 2. Drafting Phase
+<img align="right" width="308" height="143" alt="Status" src="https://github.com/user-attachments/assets/83262fd7-8ab8-4f1f-bae7-6769ea998560" />
+
 - Captains pick players in order (XYXY XYXY XY).  
-- Picked players are auto-moved to their captain’s team.  
+- Picked players are auto-moved to their captain’s team.
 - Each captain has **30s per turn**; if the timer expires, a random player is picked.  
 - Captains may use `!remove` to drop a player (counts as a turn).  
 - When both teams reach 6v6, a **10s countdown** begins before the game starts.  
