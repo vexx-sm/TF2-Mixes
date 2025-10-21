@@ -87,5 +87,5 @@ https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
 - New admin cmds: `sm_forcestart`, `sm_shuffle`  
 - Better handling of spectators/late-joins  
 - Match QoL: auto-pause and ready-up system  
-
+- Full Discord bot integration.
 </details>
