@@ -81,6 +81,9 @@ https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
      -	`mixes_dm.smx` provides DM features (health regen, random spawns). It's recommended for pre-game DM.
      -	Random spawns require these [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.3.1/configs.zip), extract in `tf2/tf/addons/sourcemod/configs`.
 
+> [!WARNING]
+> The plugin currently conflicts with SOAPdm, temporarily disable it for a proper experience.
+
 ---
 
 
