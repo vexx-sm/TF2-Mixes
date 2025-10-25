@@ -59,6 +59,7 @@ Handle g_hVoteTimer = INVALID_HANDLE;
 int g_iVoteCount[2] = {0, 0};
 bool g_bPlayerVoted[MAXPLAYERS + 1];
 float g_fPickTimerStartTime = 0.0;
+float g_fActivePickTimeout = 0.0; // Actual timeout used for the current pick timer (for HUD/timeleft)
 bool g_bPlayerPicked[MAXPLAYERS + 1];
 float g_fVoteStartTime = 0.0;
 
@@ -73,8 +74,6 @@ Handle g_hNotificationTimer = INVALID_HANDLE;
 
 // Outline system
 bool g_bOutlinesEnabled = false;
-
-char ETF2L_WHITELIST_PATH[] = "cfg/etf2l_whitelist_6v6.txt";
 
 // DM module integration
 bool g_bDMPluginLoaded = false;
@@ -168,9 +167,6 @@ void ApplyIdleStateCvars() {
     ServerCommandSilent("mp_tournament 0");
     ServerCommandSilent("mp_tournament_allow_non_admin_restart 1");
     
-    // Clear whitelist
-    ServerCommandSilent("mp_tournament_whitelist \"\"");
-    
     // Reset ALL win conditions
     ServerCommandSilent("mp_winlimit 0");
     ServerCommandSilent("mp_maxrounds 0");
@@ -220,9 +216,6 @@ void ApplyPreDraftStateCvars() {
     ServerCommandSilent("tf_use_fixed_weaponspreads 1");
     ServerCommandSilent("tf_damage_disablespread 1");
     
-    // No whitelist
-    ServerCommandSilent("mp_tournament_whitelist \"\"");
-    
     // Truly unlocked teams - no limits, no autobalance, instant respawn
     ServerCommandSilent("mp_teams_unbalance_limit 0");
     ServerCommandSilent("mp_autoteambalance 0");
@@ -255,9 +248,6 @@ void ApplyDraftStateCvars() {
     ServerCommandSilent("tf_use_fixed_weaponspreads 1");
     ServerCommandSilent("tf_damage_disablespread 1");
     
-    // No whitelist
-    ServerCommandSilent("mp_tournament_whitelist \"\"");
-    
     // Enable instant respawn during draft for warmup
     ServerCommandSilent("mp_disable_respawn_times 1");
     
@@ -272,16 +262,13 @@ void ApplyLiveGameStateCvars() {
     ServerCommandSilent("mp_tournament 1");
     ServerCommandSilent("mp_tournament_allow_non_admin_restart 1");
     
-    // Apply whitelist
-    SetCvarString("mp_tournament_whitelist", ETF2L_WHITELIST_PATH);
-    
     // Competitive gameplay settings
     ServerCommandSilent("tf_use_fixed_weaponspreads 1");
     ServerCommandSilent("tf_weapon_criticals 0");
     ServerCommandSilent("tf_damage_disablespread 1");
     
-    // CRITICAL: Disable instant respawn and enable respawn waves
-    ServerCommandSilent("mp_disable_respawn_times 1");
+    // Live game uses respawn waves (no instant respawn)
+    ServerCommandSilent("mp_disable_respawn_times 0");
     ServerCommandSilent("mp_respawnwavetime 10");
     
     // Apply ETF2L class limits
@@ -422,7 +409,18 @@ void EnterDraftState() {
     // Start pick timer
     g_fPickTimerStartTime = GetGameTime();
     KillTimerSafely(g_hPickTimer);
-    g_hPickTimer = CreateTimer(g_cvPickTimeout.FloatValue, Timer_PickTimeout);
+    {
+        int redCount, bluCount;
+        GetTeamSizes(redCount, bluCount);
+        int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
+        int team = GetClientTeam(currentCaptain);
+        if ((team == 2 && redCount >= TEAM_SIZE) || (team == 3 && bluCount >= TEAM_SIZE)) {
+            g_fActivePickTimeout = 10.0;
+        } else {
+            g_fActivePickTimeout = g_cvPickTimeout.FloatValue;
+        }
+    }
+    g_hPickTimer = CreateTimer(g_fActivePickTimeout, Timer_PickTimeout);
     
 // Start HUD timer
     if (g_hHudTimer == INVALID_HANDLE) {
@@ -622,8 +620,6 @@ public void OnPluginStart() {
     
     // Hook name change messages to suppress captain name change notifications
     HookUserMessage(GetUserMessageId("SayText2"), OnSayText2, true);
-    
-    EnsureETF2LWhitelist();
     
     // Check for updates on plugin start
     CreateTimer(5.0, Timer_CheckUpdates);
@@ -1188,7 +1184,17 @@ void RemovePlayer(int captain, int target) {
     }
     
     KillTimerSafely(g_hPickTimer);
-    g_hPickTimer = CreateTimer(g_cvPickTimeout.FloatValue, Timer_PickTimeout);
+    {
+        GetTeamSizes(redCount, bluCount);
+        int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
+        int team = GetClientTeam(currentCaptain);
+        if ((team == 2 && redCount >= TEAM_SIZE) || (team == 3 && bluCount >= TEAM_SIZE)) {
+            g_fActivePickTimeout = 10.0;
+        } else {
+            g_fActivePickTimeout = g_cvPickTimeout.FloatValue;
+        }
+    }
+    g_hPickTimer = CreateTimer(g_fActivePickTimeout, Timer_PickTimeout);
     g_fPickTimerStartTime = GetGameTime();
     
     UpdateHUDForAll();
@@ -1314,7 +1320,17 @@ public void PickPlayer(int captain, int target) {
     }
     
     KillTimerSafely(g_hPickTimer);
-    g_hPickTimer = CreateTimer(g_cvPickTimeout.FloatValue, Timer_PickTimeout);
+    {
+        GetTeamSizes(redCount, bluCount);
+        int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
+        int captainTeam = GetClientTeam(currentCaptain);
+        if ((captainTeam == 2 && redCount >= TEAM_SIZE) || (captainTeam == 3 && bluCount >= TEAM_SIZE)) {
+            g_fActivePickTimeout = 10.0;
+        } else {
+            g_fActivePickTimeout = g_cvPickTimeout.FloatValue;
+        }
+    }
+    g_hPickTimer = CreateTimer(g_fActivePickTimeout, Timer_PickTimeout);
     g_fPickTimerStartTime = GetGameTime();
     
     UpdateHUDForAll();
@@ -1506,7 +1522,10 @@ public Action Event_RoundStart(Event event, const char[] name, bool dontBroadcas
 }
 
 public Action Event_GameOver(Event event, const char[] name, bool dontBroadcast) {
-    // Event doesn't fire reliably on all servers - using Event_RoundEnd instead
+    // Ensure we only transition when our live match truly ended (map/game over)
+    if (g_eCurrentState == STATE_LIVE_GAME) {
+        CreateTimer(2.0, Timer_TransitionToPostGame);
+    }
     return Plugin_Continue;
 }
 
@@ -1700,7 +1719,8 @@ void UpdateHUDForAll() {
                 strcopy(captainName, sizeof(captainName), "Unknown Captain");
             }
             
-            float timeLeft = g_cvPickTimeout.FloatValue - (GetGameTime() - g_fPickTimerStartTime);
+            float pickTimeout = (g_fActivePickTimeout > 0.0) ? g_fActivePickTimeout : g_cvPickTimeout.FloatValue;
+            float timeLeft = pickTimeout - (GetGameTime() - g_fPickTimerStartTime);
             if (timeLeft < 0.0) timeLeft = 0.0;
             
             // Count actual team sizes
@@ -1872,7 +1892,18 @@ void ResumeDraft() {
         // Resume pick timer with fresh timeout
         KillTimerSafely(g_hPickTimer);
         g_fPickTimerStartTime = GetGameTime();
-        g_hPickTimer = CreateTimer(g_cvPickTimeout.FloatValue, Timer_PickTimeout);
+        {
+            int redCount, bluCount;
+            GetTeamSizes(redCount, bluCount);
+            int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
+            int team = GetClientTeam(currentCaptain);
+            if ((team == 2 && redCount >= TEAM_SIZE) || (team == 3 && bluCount >= TEAM_SIZE)) {
+                g_fActivePickTimeout = 10.0;
+            } else {
+                g_fActivePickTimeout = g_cvPickTimeout.FloatValue;
+            }
+        }
+        g_hPickTimer = CreateTimer(g_fActivePickTimeout, Timer_PickTimeout);
         
         // Open draft menu for current captain
         int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
@@ -2253,7 +2284,17 @@ public Action Command_AdminPick(int client, int args) {
     g_iCurrentPicker = (g_iCurrentPicker == 0) ? 1 : 0;
     
     KillTimerSafely(g_hPickTimer);
-    g_hPickTimer = CreateTimer(g_cvPickTimeout.FloatValue, Timer_PickTimeout);
+    {
+        GetTeamSizes(redCount, bluCount);
+        currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
+        team = GetClientTeam(currentCaptain);
+        if ((team == 2 && redCount >= TEAM_SIZE) || (team == 3 && bluCount >= TEAM_SIZE)) {
+            g_fActivePickTimeout = 10.0;
+        } else {
+            g_fActivePickTimeout = g_cvPickTimeout.FloatValue;
+        }
+    }
+    g_hPickTimer = CreateTimer(g_fActivePickTimeout, Timer_PickTimeout);
     g_fPickTimerStartTime = GetGameTime();
     
     UpdateHUDForAll();
@@ -2371,168 +2412,20 @@ public Action Timer_OpenDraftMenu(Handle timer, any userid) {
 public Action Timer_StartNewPickTimer(Handle timer) {
     // Start new pick timer (called after previous timer callback ends)
     if (g_eCurrentState == STATE_DRAFT && g_hPickTimer == INVALID_HANDLE) {
-        g_hPickTimer = CreateTimer(g_cvPickTimeout.FloatValue, Timer_PickTimeout);
+        int redCount, bluCount;
+        GetTeamSizes(redCount, bluCount);
+        int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
+        int team = GetClientTeam(currentCaptain);
+        if ((team == 2 && redCount >= TEAM_SIZE) || (team == 3 && bluCount >= TEAM_SIZE)) {
+            g_fActivePickTimeout = 10.0;
+        } else {
+            g_fActivePickTimeout = g_cvPickTimeout.FloatValue;
+        }
+        g_hPickTimer = CreateTimer(g_fActivePickTimeout, Timer_PickTimeout);
     }
     return Plugin_Stop;
 }
 
-void EnsureETF2LWhitelist() {
-    if (FileExists(ETF2L_WHITELIST_PATH)) {
-        return;
-    }
-    File file = OpenFile(ETF2L_WHITELIST_PATH, "w");
-    if (file == null) {
-        PrintToServer("[Mix] Failed to create ETF2L whitelist at %s", ETF2L_WHITELIST_PATH);
-        for (int i = 1; i <= MaxClients; i++) {
-            if (IsValidClient(i) && CheckCommandAccess(i, "sm_kick", ADMFLAG_KICK)) {
-                PrintToChat(i, "\x01[Mix] \x03Warning: failed to create ETF2L whitelist at %s", ETF2L_WHITELIST_PATH);
-            }
-        }
-        return;
-    }
-    file.WriteLine("// Whitelist generated by TF2-Mixes (ETF2L 6v6)");
-    file.WriteLine("\"item_whitelist\"");
-    file.WriteLine("{");
-    file.WriteLine("\t\"unlisted_items_default_to\"\t\t\"1\"");
-    static const char items[][] = {
-        "The Reserve Shooter",
-        "Bonk! Atomic Punch",
-        "Crit-a-Cola",
-        "Festive Bonk 2014",
-        "Mad Milk",
-        "Mutated Milk",
-        "Pretty Boy's Pocket Pistol",
-        "Promo Flying Guillotine",
-        "The Flying Guillotine",
-        "The Soda Popper",
-        "The Wrap Assassin",
-        "The Battalion's Backup",
-        "The Cow Mangler 5000",
-        "The Disciplinary Action",
-        "The Market Gardener",
-        "The Detonator",
-        "The Gas Passer",
-        "The Scorch Shot",
-        "The Loch-n-Load",
-        "The Quickiebomb Launcher",
-        "Deflector",
-        "Fists of Steel",
-        "Natascha",
-        "Festive Wrangler",
-        "The Giger Counter",
-        "The Rescue Ranger",
-        "The Short Circuit",
-        "The Wrangler",
-        "The Quick-Fix",
-        "The Vaccinator",
-        "Festive Jarate",
-        "Jarate",
-        "Shooting Star",
-        "The Machina",
-        "The Self-Aware Beauty Mark",
-        "The Sydney Sleeper",
-        "The Diamondback",
-        "Activated Campaign 3 Pass",
-        "Nose Candy",
-        "Yeti Park Cap",
-        "The Corpse Carrier",
-        "The Sprinting Cephalopod",
-        "Charity Noise Maker - Bell",
-        "Charity Noise Maker - Tingsha",
-        "Halloween Noise Maker - Banshee",
-        "Halloween Noise Maker - Black Cat",
-        "Halloween Noise Maker - Crazy Laugh",
-        "Halloween Noise Maker - Gremlin",
-        "Halloween Noise Maker - Stabby",
-        "Halloween Noise Maker - Werewolf",
-        "Halloween Noise Maker - Witch",
-        "Noise Maker - TF Birthday",
-        "Noise Maker - Vuvuzela",
-        "Noise Maker - Winter 2011",
-        "Promotional Noise Maker - Fireworks",
-        "Promotional Noise Maker - Koto",
-        "Autogrant Pyrovision Goggles",
-        "Pet Balloonicorn",
-        "Pet Reindoonicorn",
-        "Pyrovision Goggles",
-        "The Burning Bongos",
-        "The Infernal Orchestrina",
-        "The Lollichop",
-        "The Rainblower",
-        "Elf-Made Bandanna",
-        "Jolly Jingler",
-        "Reindoonibeanie",
-        "Seasonal Employee",
-        "The Bootie Time",
-        "Elf Defence",
-        "Elf Ignition",
-        "The Jingle Belt",
-        "Elf Care Provider",
-        "Conga Taunt",
-        "Flippin' Awesome Taunt",
-        "High Five Taunt",
-        "RPS Taunt",
-        "Skullcracker Taunt",
-        "Square Dance Taunt",
-        "Taunt: Kazotsky Kick",
-        "Taunt: Mannrobics",
-        "Taunt: The Fist Bump",
-        "Taunt: The Scaredy-cat!",
-        "Taunt: The Victory Lap",
-        "Taunt: Zoomin' Broom",
-        "Taunt: Runner's Rhythm",
-        "Taunt: Spin-to-Win",
-        "Taunt: The Boston Boarder",
-        "Taunt: The Bunnyhopper",
-        "Taunt: The Carlton",
-        "Taunt: The Homerunner's Hobby",
-        "Taunt: The Scooty Scoot",
-        "Taunt: Neck Snap",
-        "Taunt: Panzer Pants",
-        "Taunt: Rocket Jockey",
-        "Pool Party Taunt",
-        "Taunt: Roasty Toasty",
-        "Taunt: Scorcher's Solo",
-        "Taunt: The Balloonibouncer",
-        "Taunt: The Hot Wheeler",
-        "Taunt: The Skating Scorcher",
-        "Taunt: Drunk Mann's Cannon",
-        "Taunt: Scotsmann's Stagger",
-        "Taunt: Shanty Shipmate",
-        "Taunt: The Drunken Sailor",
-        "Taunt: The Pooped Deck",
-        "Taunt: Bare Knuckle Beatdown",
-        "Taunt: Russian Rubdown",
-        "Taunt: The Boiling Point",
-        "Taunt: The Road Rager",
-        "Taunt: The Russian Arms Race",
-        "Taunt: The Soviet Strongarm",
-        "Taunt: The Table Tantrum",
-        "Rancho Relaxo Taunt",
-        "Taunt: Bucking Bronco",
-        "Taunt: Texas Truckin",
-        "Taunt: The Dueling Banjo",
-        "Taunt: The Jumping Jack",
-        "Taunt: Surgeon's Squeezebox",
-        "Taunt: The Mannbulance!",
-        "Taunt: Time Out Therapy",
-        "Taunt: Didgeridrongo",
-        "Taunt: Shooter's Stakeout",
-        "Taunt: Luxury Lounge",
-        "Taunt: Tailored Terminal",
-        "Taunt: The Boxtrot",
-        "Taunt: The Crypt Creeper",
-        "Taunt: The Travel Agent",
-        "Taunt: Tuefort Tango"
-    };
-    for (int i = 0; i < sizeof(items); i++) {
-        char line[256];
-        Format(line, sizeof(line), "\t\"%s\"\t\t\"0\"", items[i]);
-        file.WriteLine(line);
-    }
-    file.WriteLine("}");
-    delete file;
-}
 
 // Silent cvar setters to avoid chat spam
 void SetCvarInt(const char[] name, int value) {
@@ -2570,7 +2463,7 @@ void ServerCommandSilent(const char[] cmd) {
     ServerCommand(cmd);
 }
 
-void SetCvarString(const char[] name, const char[] value) {
+stock void SetCvarString(const char[] name, const char[] value) {
     ConVar c = FindConVar(name);
     if (c != null) {
         // Temporarily remove FCVAR_NOTIFY to suppress chat spam
@@ -3151,14 +3044,14 @@ int CompareVersions(const char[] version1, const char[] version2) {
 public Action Command_MixVersion(int client, int args) {
     if (!IsValidClient(client)) return Plugin_Handled;
     
-    ReplyToCommand(client, "\\x01[Mix] \\x03Current version: v%s", g_sCurrentVersion);
+    ReplyToCommand(client, "\x01[Mix] \x03Current version: v%s", g_sCurrentVersion);
     
     // Check if SteamWorks is available
     if (!STEAMWORKS_AVAILABLE()) {
-        ReplyToCommand(client, "\\x01[Mix] \\x03Auto-update disabled - SteamWorks not available");
-        ReplyToCommand(client, "\\x01[Mix] \\x03SteamWorks should be installed by default with SourceMod");
+        ReplyToCommand(client, "\x01[Mix] \x03Auto-update disabled - SteamWorks not available");
+        ReplyToCommand(client, "\x01[Mix] \x03SteamWorks should be installed by default with SourceMod");
     } else {
-        ReplyToCommand(client, "\\x03Auto-update system ready (SteamWorks available)");
+        ReplyToCommand(client, "\x01[Mix] \x03Auto-update system ready (SteamWorks available)");
     }
     
     return Plugin_Handled;
@@ -3172,21 +3065,21 @@ public Action Command_MixTest(int client, int args) {
         return Plugin_Handled;
     }
     
-    PrintToChat(client, "\\x01[Mix] \\x03Setting up test environment...");
+    PrintToChat(client, "\x01[Mix] \x03Setting up test environment...");
     
     // Step 1: Enable cheats
     ServerCommand("sv_cheats 1");
-    PrintToChat(client, "\\x01[Mix] \\x03✓ Cheats enabled");
+    PrintToChat(client, "\x01[Mix] \x03✓ Cheats enabled");
     
     // Step 2: Add 11 numbered bots via 'bot' command (works best for testing)
     for (int i = 0; i < 11; i++) {
         ServerCommand("bot");
     }
-    PrintToChat(client, "\\x01[Mix] \\x03✓ Added 11 bots (via 'bot')");
+    PrintToChat(client, "\x01[Mix] \x03✓ Added 11 bots (via 'bot')");
     
     // Step 3: Set you as captain (with delay to allow bots to connect)
     CreateTimer(2.0, Timer_SetTestCaptain, GetClientUserId(client));
-    PrintToChat(client, "\\x01[Mix] \\x03✓ You will be set as first captain in 2 seconds...");
+    PrintToChat(client, "\x01[Mix] \x03✓ You will be set as first captain in 2 seconds...");
     
     return Plugin_Handled;
 }
@@ -3211,8 +3104,8 @@ public Action Timer_SetTestCaptain(Handle timer, any userid) {
     Format(newName, sizeof(newName), "[CAP] %s", g_sOriginalNames[client]);
     SetClientName(client, newName);
     
-    PrintToChatAll("\\x01[Mix] \\x03%N is now the first team captain!", client);
-    PrintToChat(client, "\\x01[Mix] \\x03Test setup complete! Need 1 more captain to start draft.");
+    PrintToChatAll("\x01[Mix] \x03%N is now the first team captain!", client);
+    PrintToChat(client, "\x01[Mix] \x03Test setup complete! Need 1 more captain to start draft.");
     
     // Transition to PRE_DRAFT state
     SetMixState(STATE_PRE_DRAFT);
@@ -3247,4 +3140,3 @@ void DM_StopAllFeatures() {
 // ========================================
 // END MIX UPDATE SYSTEM
 // ========================================
-

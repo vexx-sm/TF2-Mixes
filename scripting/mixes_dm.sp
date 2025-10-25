@@ -271,9 +271,31 @@ public Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadca
         
         // Stop regen for dead player
         StopRegen(client);
+        
+        // Ensure instant respawn during DM (no wait/no transition)
+        // Keep respawn times disabled while DM is active
+        ServerCommand("mp_disable_respawn_times 1");
+        
+        // Respawn player immediately next frame to avoid deathcam
+        CreateTimer(0.0, Timer_RespawnNow, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
     }
         
     return Plugin_Continue;
+}
+
+public Action Timer_RespawnNow(Handle timer, any userid) {
+    int client = GetClientOfUserId(userid);
+    if (!IsValidClient(client)) {
+        return Plugin_Stop;
+    }
+    
+    // Only respawn if DM is still active
+    if (!IsDMActive()) {
+        return Plugin_Stop;
+    }
+    
+    TF2_RespawnPlayer(client);
+    return Plugin_Stop;
 }
 
 public Action Event_PlayerHurt(Event event, const char[] name, bool dontBroadcast) {
@@ -384,20 +406,25 @@ void StopRegen(int client) {
 public Action Timer_RegenTick(Handle timer, any userid) {
     int client = GetClientOfUserId(userid);
     
+    // IMPORTANT: Never delete/kill the timer from inside its own callback.
+    // Instead, clear our bookkeeping and return Plugin_Stop.
     if (!IsValidClient(client) || !IsPlayerAlive(client)) {
-        StopRegen(client);
+        g_bRegen[client] = false;
+        g_hRegenTimer[client] = INVALID_HANDLE;
         return Plugin_Stop;
     }
     
     // Only regen when globally enabled and during pre-game DM phase (before draft starts)
     if (!IsDMActive()) {
-        StopRegen(client);
+        g_bRegen[client] = false;
+        g_hRegenTimer[client] = INVALID_HANDLE;
         return Plugin_Stop;
     }
     
     // Stop regen if disabled
     if (g_iRegenHP <= 0) {
-        StopRegen(client);
+        g_bRegen[client] = false;
+        g_hRegenTimer[client] = INVALID_HANDLE;
         return Plugin_Stop;
     }
     
@@ -438,6 +465,8 @@ public void OnDMPreGameActiveChanged(ConVar convar, const char[] oldValue, const
     bool active = GetConVarBool(convar);
     
     if (active) {
+        // Ensure instant respawn is active during DM
+        ServerCommand("mp_disable_respawn_times 1");
         LoadSpawnPoints();
     } else {
         ResetAllPlayersRegen();
@@ -447,7 +476,10 @@ public void OnDMPreGameActiveChanged(ConVar convar, const char[] oldValue, const
 public void OnDMDraftInProgressChanged(ConVar convar, const char[] oldValue, const char[] newValue) {
     if (convar == null) return;
     
-    // Draft state changed - no direct action needed
+    // Draft state changed - if DM is active, ensure instant respawn
+    if (IsDMActive()) {
+        ServerCommand("mp_disable_respawn_times 1");
+    }
     // DM activation is controlled by OnDMPreGameActiveChanged
 }
 
