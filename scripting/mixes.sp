@@ -21,7 +21,7 @@ public Plugin myinfo = {
     name = "TF2-Mixes",
     author = "vexx-sm",
     description = "A TF2 SourceMod plugin that sets up a 6s mix",
-    version = "0.3.1",
+    version = "0.3.2",
     url = "https://github.com/vexx-sm/TF2-Mixes"
 };
 
@@ -46,7 +46,6 @@ int g_iPicksRemaining = 0;
 int g_iSavedCurrentPicker = 0;
 int g_iSavedPicksRemaining = 0;
 float g_fSavedPickTimerStartTime = 0.0;
-int g_iSavedCountdownSeconds = 0;
 
 
 // Player reconnection state preservation
@@ -72,6 +71,9 @@ int g_iCountdownSeconds = 0;
 Handle g_hCountdownTimer = INVALID_HANDLE;
 Handle g_hNotificationTimer = INVALID_HANDLE;
 
+// Awaiting manual ready-up after draft completion
+bool g_bAwaitingReadyUp = false;
+
 // Outline system
 bool g_bOutlinesEnabled = false;
 
@@ -79,7 +81,6 @@ bool g_bOutlinesEnabled = false;
 bool g_bDMPluginLoaded = false;
 
 // Tournament pre-start flag to align countdown with tournament ready-up
-bool g_bPreStartedTournament = false;
 
 // Chat color tag for consistent branding
 static const char MIX_TAG[] = "\x07FFD700[Mix]\x01 ";
@@ -132,7 +133,9 @@ int FindPlayerByName(const char[] target, int teamFilter = 0, bool spectatorOnly
 
 void KillTimerSafely(Handle &timer) {
     if (timer != INVALID_HANDLE) {
-        delete timer;
+        if (IsValidHandle(timer)) {
+            delete timer;
+        }
         timer = INVALID_HANDLE;
     }
 }
@@ -183,16 +186,23 @@ void ApplyIdleStateCvars() {
     ServerCommandSilent("mp_forceautoteam 0");
     ServerCommandSilent("mp_disable_respawn_times 1"); // Enable instant respawn
     
-    // Remove class limits
-    SetCvarInt("tf_tournament_classlimit_scout", 0);
-    SetCvarInt("tf_tournament_classlimit_soldier", 0);
-    SetCvarInt("tf_tournament_classlimit_pyro", 0);
-    SetCvarInt("tf_tournament_classlimit_demoman", 0);
-    SetCvarInt("tf_tournament_classlimit_heavy", 0);
-    SetCvarInt("tf_tournament_classlimit_engineer", 0);
-    SetCvarInt("tf_tournament_classlimit_medic", 0);
-    SetCvarInt("tf_tournament_classlimit_sniper", 0);
-    SetCvarInt("tf_tournament_classlimit_spy", 0);
+    // Allow spectating anyone outside live game
+    SetCvarInt("mp_forcecamera", 0);
+    
+    // Remove class limits (use -1 to unlock)
+    SetCvarInt("tf_tournament_classlimit_scout", -1);
+    SetCvarInt("tf_tournament_classlimit_soldier", -1);
+    SetCvarInt("tf_tournament_classlimit_pyro", -1);
+    SetCvarInt("tf_tournament_classlimit_demoman", -1);
+    SetCvarInt("tf_tournament_classlimit_heavy", -1);
+    SetCvarInt("tf_tournament_classlimit_engineer", -1);
+    SetCvarInt("tf_tournament_classlimit_medic", -1);
+    SetCvarInt("tf_tournament_classlimit_sniper", -1);
+    SetCvarInt("tf_tournament_classlimit_spy", -1);
+    
+    // Disable AFK auto-spectate/kick system entirely
+    SetCvarInt("mp_idledealmethod", 0);
+    SetCvarInt("mp_idlemaxtime", 0);
     
     // Normal bot settings
     ServerCommandSilent("tf_bot_quota_mode normal");
@@ -222,16 +232,23 @@ void ApplyPreDraftStateCvars() {
     ServerCommandSilent("mp_forceautoteam 0");
     ServerCommandSilent("mp_disable_respawn_times 1"); // Enable instant respawn
     
-    // Remove class limits
-    SetCvarInt("tf_tournament_classlimit_scout", 0);
-    SetCvarInt("tf_tournament_classlimit_soldier", 0);
-    SetCvarInt("tf_tournament_classlimit_pyro", 0);
-    SetCvarInt("tf_tournament_classlimit_demoman", 0);
-    SetCvarInt("tf_tournament_classlimit_heavy", 0);
-    SetCvarInt("tf_tournament_classlimit_engineer", 0);
-    SetCvarInt("tf_tournament_classlimit_medic", 0);
-    SetCvarInt("tf_tournament_classlimit_sniper", 0);
-    SetCvarInt("tf_tournament_classlimit_spy", 0);
+    // Allow spectating anyone outside live game
+    SetCvarInt("mp_forcecamera", 0);
+    
+    // Remove class limits (use -1 to unlock)
+    SetCvarInt("tf_tournament_classlimit_scout", -1);
+    SetCvarInt("tf_tournament_classlimit_soldier", -1);
+    SetCvarInt("tf_tournament_classlimit_pyro", -1);
+    SetCvarInt("tf_tournament_classlimit_demoman", -1);
+    SetCvarInt("tf_tournament_classlimit_heavy", -1);
+    SetCvarInt("tf_tournament_classlimit_engineer", -1);
+    SetCvarInt("tf_tournament_classlimit_medic", -1);
+    SetCvarInt("tf_tournament_classlimit_sniper", -1);
+    SetCvarInt("tf_tournament_classlimit_spy", -1);
+    
+    // Disable AFK auto-spectate/kick system entirely
+    SetCvarInt("mp_idledealmethod", 0);
+    SetCvarInt("mp_idlemaxtime", 0);
 }
 
 void ApplyDraftStateCvars() {
@@ -255,6 +272,13 @@ void ApplyDraftStateCvars() {
     ServerCommandSilent("mp_teams_unbalance_limit 1");
     ServerCommandSilent("mp_autoteambalance 0");
     ServerCommandSilent("mp_forceautoteam 0");
+    
+    // Disable AFK auto-spectate/kick system entirely during draft
+    SetCvarInt("mp_idledealmethod", 0);
+    SetCvarInt("mp_idlemaxtime", 0);
+    
+    // Allow spectating anyone outside live game
+    SetCvarInt("mp_forcecamera", 0);
 }
 
 void ApplyLiveGameStateCvars() {
@@ -271,6 +295,10 @@ void ApplyLiveGameStateCvars() {
     ServerCommandSilent("mp_disable_respawn_times 0");
     ServerCommandSilent("mp_respawnwavetime 10");
     
+    // Disable AFK auto-spectate/kick system entirely
+    SetCvarInt("mp_idledealmethod", 0);
+    SetCvarInt("mp_idlemaxtime", 0);
+    
     // Apply ETF2L class limits
     SetCvarInt("tf_tournament_classlimit_scout", 2);
     SetCvarInt("tf_tournament_classlimit_soldier", 2);
@@ -280,7 +308,7 @@ void ApplyLiveGameStateCvars() {
     SetCvarInt("tf_tournament_classlimit_engineer", 1);
     SetCvarInt("tf_tournament_classlimit_medic", 1);
     SetCvarInt("tf_tournament_classlimit_sniper", 1);
-    SetCvarInt("tf_tournament_classlimit_spy", 2);
+    SetCvarInt("tf_tournament_classlimit_spy", 1);
     
     // Apply map-specific win conditions (ETF2L 6s)
     if (IsKothMap()) {
@@ -299,6 +327,9 @@ void ApplyLiveGameStateCvars() {
     ServerCommandSilent("mp_teams_unbalance_limit 0");
     ServerCommandSilent("mp_autoteambalance 0");
     ServerCommandSilent("mp_forceautoteam 0");
+    
+    // Restrict to teammate spectate during live game
+    SetCvarInt("mp_forcecamera", 1);
 }
 
 void EnterIdleState() {
@@ -335,6 +366,7 @@ void EnterIdleState() {
     
     // Apply IDLE state cvars (complete reset)
     ApplyIdleStateCvars();
+    DisableObjectives();
     
     // Enable DM for idle state
     if (g_bDMPluginLoaded) {
@@ -351,11 +383,17 @@ void EnterIdleState() {
 void EnterPreDraftState() {
     // Apply PRE_DRAFT state cvars
     ApplyPreDraftStateCvars();
+    DisableObjectives();
     
     // Enable DM for pre-draft
     if (g_bDMPluginLoaded) {
         DM_SetPreGameActive(true);
         DM_SetDraftInProgress(false);
+    }
+    
+    // Ensure players are unlocked during pre-draft
+    for (int i = 1; i <= MaxClients; i++) {
+        g_bPlayerLocked[i] = false;
     }
     
     // Start HUD timer
@@ -374,6 +412,7 @@ void EnterDraftState() {
     
     // Apply DRAFT state cvars
     ApplyDraftStateCvars();
+    DisableObjectives();
     
     // Initialize draft state
     g_iCurrentPicker = 0;
@@ -445,6 +484,7 @@ void EnterLiveGameState() {
     
     // Apply LIVE_GAME state cvars (includes tournament mode, whitelist, class limits, win conditions)
     ApplyLiveGameStateCvars();
+    EnableObjectives();
     
     // Disable DM for live game
     if (g_bDMPluginLoaded) {
@@ -460,16 +500,7 @@ void EnterLiveGameState() {
         }
     }
     
-    // Restart tournament and force teams ready (unless already pre-started)
-    if (!g_bPreStartedTournament) {
-        ServerCommand("mp_tournament_restart");
-        CreateTimer(0.5, Timer_ForceTeamsReady);
-    } else {
-        g_bPreStartedTournament = false;
-    }
     
-    // Show completion message
-    CreateTimer(3.0, Timer_ShowDraftCompleteMessage);
 }
 
 void EnterPostGameState() {
@@ -479,6 +510,15 @@ void EnterPostGameState() {
     // Start HUD timer for post-game display
     if (g_hHudTimer == INVALID_HANDLE) {
         g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
+    }
+    DisableObjectives();
+    
+    // Allow free spectate in post game
+    SetCvarInt("mp_forcecamera", 0);
+    
+    // Unlock players in post-game
+    for (int i = 1; i <= MaxClients; i++) {
+        g_bPlayerLocked[i] = false;
     }
 }
 
@@ -597,7 +637,7 @@ public void OnPluginStart() {
     RegAdminCmd("sm_testmix", Command_MixTest, ADMFLAG_GENERIC, "Quick test setup: enable cheats, add 11 bots, set you as captain");
     
     // Public version ConVar for server tracking (FCVAR_NOTIFY | FCVAR_DONTRECORD)
-    CreateConVar("sm_mixes_version", "0.3.1", "TF2-Mixes plugin version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
+    CreateConVar("sm_mixes_version", "0.3.2", "TF2-Mixes plugin version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
     
     g_cvPickTimeout = CreateConVar("sm_mix_pick_timeout", "30.0", "Time limit for picks in seconds");
     g_cvCommandCooldown = CreateConVar("sm_mix_command_cooldown", "5.0", "Cooldown time for commands in seconds");
@@ -1157,17 +1197,14 @@ void RemovePlayer(int captain, int target) {
     
     PrintToChatAll("\x01[Mix] \x03%N has been removed from the %s team by %N!", target, (view_as<TFTeam>(captainTeam) == TFTeam_Red) ? "RED" : "BLU", captain);
     
-    // Stop countdown if active
-    if (g_eCurrentState == STATE_DRAFT) {
-        StopCountdown();
-    }
+    // Countdown removed: no action needed
     
     // Check if teams are still complete
     int redCount, bluCount;
     GetTeamSizes(redCount, bluCount);
     
     if (redCount == TEAM_SIZE && bluCount == TEAM_SIZE) {
-        StartCountdown();
+        EndDraft();
         return;
     }
     
@@ -1302,7 +1339,7 @@ public void PickPlayer(int captain, int target) {
     GetTeamSizes(redCount, bluCount);
     
     if (redCount == TEAM_SIZE && bluCount == TEAM_SIZE) {
-        StartCountdown();
+        EndDraft();
         return;
     }
     
@@ -1337,8 +1374,22 @@ public void PickPlayer(int captain, int target) {
 }
 
 public void EndDraft() {
-    // Transition to live game state
-    SetMixState(STATE_LIVE_GAME);
+    // Do not enter live game yet; wait for both teams to ready up (F4)
+    g_bAwaitingReadyUp = true;
+
+    // Enable tournament mode so ready-up is possible, keep teams locked
+    ServerCommandSilent("mp_tournament 1");
+    // Enter ready-up phase so F4 is available
+    ServerCommand("mp_tournament_restart");
+
+    // DM stays enabled until live game actually begins
+    if (g_bDMPluginLoaded) {
+        DM_SetDraftInProgress(false);
+        DM_SetPreGameActive(true);
+    }
+
+    // Prompt players to ready up
+    CreateTimer(1.0, Timer_ShowDraftCompleteMessage);
 }
 
 
@@ -1517,7 +1568,15 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 
 
 public Action Event_RoundStart(Event event, const char[] name, bool dontBroadcast) {
-    // Don't interfere with state machine - EnterIdleState already handles everything
+    // When both teams ready up in tournament mode, a round start follows; switch to LIVE_GAME then
+    if (g_bAwaitingReadyUp && g_eCurrentState == STATE_DRAFT) {
+        g_bAwaitingReadyUp = false;
+        SetMixState(STATE_LIVE_GAME);
+    }
+    // If not live, re-assert disabled objectives (map may have re-enabled them)
+    if (g_eCurrentState != STATE_LIVE_GAME) {
+        DisableObjectives();
+    }
     return Plugin_Continue;
 }
 
@@ -1553,12 +1612,6 @@ public Action Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 }
 
 
-public Action Timer_ForceTeamsReady(Handle timer) {
-    // Force both teams to ready state using GameRules
-    GameRules_SetProp("m_bTeamReady", 1, .element=2);  // RED team ready
-    GameRules_SetProp("m_bTeamReady", 1, .element=3);  // BLU team ready
-    return Plugin_Stop;
-}
 
 public Action Timer_TransitionToPostGame(Handle timer) {
     if (g_eCurrentState == STATE_LIVE_GAME) {
@@ -1651,9 +1704,9 @@ public Action Timer_EndPostGameVote(Handle timer) {
 
 public Action Timer_ShowDraftCompleteMessage(Handle timer) {
     if (IsKothMap()) {
-        PrintToChatAll("%s\x03Draft complete!\x01 Mix has started (ETF2L 6v6, KOTH - First to 4).", MIX_TAG);
+        PrintToChatAll("%s\x03Draft complete!\x01 Press F4 to ready up. Mode: ETF2L 6v6, KOTH - First to 4.", MIX_TAG);
     } else {
-        PrintToChatAll("%s\x03Draft complete!\x01 Mix has started (ETF2L 6v6, 5CP - First to 5).", MIX_TAG);
+        PrintToChatAll("%s\x03Draft complete!\x01 Press F4 to ready up. Mode: ETF2L 6v6, 5CP - First to 5.", MIX_TAG);
     }
     return Plugin_Stop;
 }
@@ -1741,8 +1794,8 @@ void UpdateHUDForAll() {
             Format(buffer, sizeof(buffer), "DRAFT IN PROGRESS\n%s's pick\nTime: %.0fs\n%s - %s", 
                    captainName, timeLeft, redStr, bluStr);
         }
-        else if (g_iCountdownSeconds > 0) {
-            Format(buffer, sizeof(buffer), "GAME STARTING IN %d SECONDS...", g_iCountdownSeconds);
+        else if (g_bAwaitingReadyUp) {
+            Format(buffer, sizeof(buffer), "DRAFT COMPLETE\nPress F4 to ready up\nTeams locked");
         }
         else {
             buffer[0] = '\0';
@@ -1847,13 +1900,6 @@ void StartGracePeriod(int missingCaptain) {
     g_iSavedPicksRemaining = g_iPicksRemaining;
     g_fSavedPickTimerStartTime = g_fPickTimerStartTime;
     
-    // Save countdown state if active
-    if (g_iCountdownSeconds > 0) {
-        g_iSavedCountdownSeconds = g_iCountdownSeconds;
-        g_iCountdownSeconds = 0;
-        KillTimerSafely(g_hCountdownTimer);
-    }
-    
     g_iMissingCaptain = missingCaptain;
     
     KillTimerSafely(g_hPickTimer);
@@ -1883,33 +1929,26 @@ void ResumeDraft() {
     g_fPickTimerStartTime = g_fSavedPickTimerStartTime;
     g_iMissingCaptain = -1;
     
-    // Restore countdown state if it was active
-    if (g_iSavedCountdownSeconds > 0) {
-        g_iCountdownSeconds = g_iSavedCountdownSeconds;
-        g_iSavedCountdownSeconds = 0;
-        g_hCountdownTimer = CreateTimer(1.0, Timer_Countdown, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
-    } else {
-        // Resume pick timer with fresh timeout
-        KillTimerSafely(g_hPickTimer);
-        g_fPickTimerStartTime = GetGameTime();
-        {
-            int redCount, bluCount;
-            GetTeamSizes(redCount, bluCount);
-            int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
-            int team = GetClientTeam(currentCaptain);
-            if ((team == 2 && redCount >= TEAM_SIZE) || (team == 3 && bluCount >= TEAM_SIZE)) {
-                g_fActivePickTimeout = 10.0;
-            } else {
-                g_fActivePickTimeout = g_cvPickTimeout.FloatValue;
-            }
-        }
-        g_hPickTimer = CreateTimer(g_fActivePickTimeout, Timer_PickTimeout);
-        
-        // Open draft menu for current captain
+    // Countdown removed: resume pick timer flow regardless
+    KillTimerSafely(g_hPickTimer);
+    g_fPickTimerStartTime = GetGameTime();
+    {
+        int redCount, bluCount;
+        GetTeamSizes(redCount, bluCount);
         int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
-        if (IsValidClient(currentCaptain) && !IsFakeClient(currentCaptain)) {
-            CreateTimer(0.5, Timer_OpenDraftMenu, GetClientUserId(currentCaptain));
+        int team = GetClientTeam(currentCaptain);
+        if ((team == 2 && redCount >= TEAM_SIZE) || (team == 3 && bluCount >= TEAM_SIZE)) {
+            g_fActivePickTimeout = 10.0;
+        } else {
+            g_fActivePickTimeout = g_cvPickTimeout.FloatValue;
         }
+    }
+    g_hPickTimer = CreateTimer(g_fActivePickTimeout, Timer_PickTimeout);
+    
+    // Open draft menu for current captain
+    int currentCaptain = (g_iCurrentPicker == 0) ? g_iCaptain1 : g_iCaptain2;
+    if (IsValidClient(currentCaptain) && !IsFakeClient(currentCaptain)) {
+        CreateTimer(0.5, Timer_OpenDraftMenu, GetClientUserId(currentCaptain));
     }
     
     // Ensure HUD timer is running
@@ -2108,7 +2147,7 @@ public Action Command_AutoDraft(int client, int args) {
     GetTeamSizes(redCount, bluCount);
     
     if (redCount == TEAM_SIZE && bluCount == TEAM_SIZE) {
-        StartCountdown();
+        EndDraft();
     }
     
     UpdateHUDForAll();
@@ -2271,7 +2310,7 @@ public Action Command_AdminPick(int client, int args) {
     GetTeamSizes(redCount, bluCount);
     
     if (redCount == TEAM_SIZE && bluCount == TEAM_SIZE) {
-        StartCountdown();
+        EndDraft();
         return Plugin_Handled;
     }
     
@@ -2463,6 +2502,78 @@ void ServerCommandSilent(const char[] cmd) {
     ServerCommand(cmd);
 }
 
+// ========================================
+// OBJECTIVE GATING (enable/disable caps and timers by state)
+// ========================================
+
+void DisableObjectives() {
+    int ent = -1;
+    // Block capture triggers (CP/KOTH/PL/CTF zones)
+    while ((ent = FindEntityByClassname(ent, "trigger_capture_area")) > 0) {
+        AcceptEntityInput(ent, "Disable");
+    }
+    ent = -1;
+    while ((ent = FindEntityByClassname(ent, "func_capturezone")) > 0) {
+        AcceptEntityInput(ent, "Disable");
+    }
+    // Lock control points (CP/KOTH)
+    ent = -1;
+    while ((ent = FindEntityByClassname(ent, "team_control_point")) > 0) {
+        AcceptEntityInput(ent, "Lock");
+    }
+    // Disable KOTH/round timers if present
+    ent = -1;
+    while ((ent = FindEntityByClassname(ent, "team_round_timer")) > 0) {
+        AcceptEntityInput(ent, "Disable");
+    }
+    // Disable koth/cp logic masters if present
+    ent = -1;
+    while ((ent = FindEntityByClassname(ent, "team_control_point_master")) > 0) {
+        AcceptEntityInput(ent, "Disable");
+    }
+    ent = -1;
+    while ((ent = FindEntityByClassname(ent, "tf_logic_koth")) > 0) {
+        AcceptEntityInput(ent, "Disable");
+    }
+    // Disable CTF flags (prevent pickup/cap)
+    ent = -1;
+    while ((ent = FindEntityByClassname(ent, "item_teamflag")) > 0) {
+        AcceptEntityInput(ent, "Disable");
+    }
+}
+
+void EnableObjectives() {
+    int ent = -1;
+    // Enable capture triggers
+    while ((ent = FindEntityByClassname(ent, "trigger_capture_area")) > 0) {
+        AcceptEntityInput(ent, "Enable");
+    }
+    ent = -1;
+    while ((ent = FindEntityByClassname(ent, "func_capturezone")) > 0) {
+        AcceptEntityInput(ent, "Enable");
+    }
+    // Unlock control points
+    ent = -1;
+    while ((ent = FindEntityByClassname(ent, "team_control_point")) > 0) {
+        AcceptEntityInput(ent, "Unlock");
+    }
+    // Do not force resume round timers; let map logic control KOTH timers after a cap
+    // Re-enable logic entities if present
+    ent = -1;
+    while ((ent = FindEntityByClassname(ent, "team_control_point_master")) > 0) {
+        AcceptEntityInput(ent, "Enable");
+    }
+    ent = -1;
+    while ((ent = FindEntityByClassname(ent, "tf_logic_koth")) > 0) {
+        AcceptEntityInput(ent, "Enable");
+    }
+    // Enable CTF flags
+    ent = -1;
+    while ((ent = FindEntityByClassname(ent, "item_teamflag")) > 0) {
+        AcceptEntityInput(ent, "Enable");
+    }
+}
+
 stock void SetCvarString(const char[] name, const char[] value) {
     ConVar c = FindConVar(name);
     if (c != null) {
@@ -2511,71 +2622,10 @@ void GetTeamSizes(int &redCount, int &bluCount) {
     }
 }
 
-void StartCountdown() {
-    if (g_eCurrentState != STATE_DRAFT) return;
-    
-    // Don't start if already counting down
-    if (g_iCountdownSeconds > 0) return;
-    
-    g_iCountdownSeconds = 10;
-    g_bPreStartedTournament = false;
-    
-    // Kill any existing pick timer
-    KillTimerSafely(g_hPickTimer);
-    
-    // Ensure HUD timer is running for countdown display
-    if (g_hHudTimer == INVALID_HANDLE) {
-        g_hHudTimer = CreateTimer(1.0, Timer_UpdateHUD, _, TIMER_REPEAT);
-    }
-    
-    g_hCountdownTimer = CreateTimer(1.0, Timer_Countdown, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
-    UpdateHUDForAll();
-}
-
-void StopCountdown() {
-    if (g_eCurrentState != STATE_DRAFT) return;
-    
-    g_iCountdownSeconds = 0;
-    KillTimerSafely(g_hCountdownTimer);
-    UpdateHUDForAll();
-}
-
-public Action Timer_Countdown(Handle timer) {
-    // Check if teams are still balanced during countdown
-    int redCount, bluCount;
-    GetTeamSizes(redCount, bluCount);
-    
-    if (redCount != TEAM_SIZE || bluCount != TEAM_SIZE) {
-        // Teams became unbalanced, stop countdown
-        g_hCountdownTimer = INVALID_HANDLE;
-        g_iCountdownSeconds = 0;
-        return Plugin_Stop;
-    }
-
-    // Kick off tournament restart at 6 seconds to sync with countdown
-    if (g_iCountdownSeconds == 6 && !g_bPreStartedTournament) {
-        // Apply live game cvars early and start tournament restart
-        ApplyLiveGameStateCvars();
-        ServerCommand("mp_tournament_restart");
-        CreateTimer(0.5, Timer_ForceTeamsReady);
-        g_bPreStartedTournament = true;
-    }
-
-    g_iCountdownSeconds--;
-    
-    if (g_iCountdownSeconds <= 0) {
-        g_hCountdownTimer = INVALID_HANDLE;
-        EndDraft();
-        return Plugin_Stop;
-    }
-    
-    UpdateHUDForAll();
-    return Plugin_Continue;
-}
 
 public Action Timer_ShowInfoCard(Handle timer) {
     PrintToServer("+----------------------------------------------+");
-    PrintToServer("|               TF2-Mixes v0.3.1               |");
+    PrintToServer("|               TF2-Mixes v0.3.2               |");
     PrintToServer("|     vexx-sm | Type !helpmix for commands     |");
     PrintToServer("+----------------------------------------------+");
 
@@ -2673,7 +2723,7 @@ void ToggleTeamOutlines(bool enabled) {
 // ========================================
 
 // Update system variables
-char g_sCurrentVersion[32] = "0.3.1";
+char g_sCurrentVersion[32] = "0.3.2";
 char g_sLatestVersion[32];
 char g_sUpdateURL[256];
 bool g_bUpdateAvailable = false;
@@ -3115,26 +3165,42 @@ public Action Timer_SetTestCaptain(Handle timer, any userid) {
 
 
 // ========================================
+// ENTITY GUARDRAILS FOR OBJECTIVES
+// ========================================
+
+public void OnEntityCreated(int entity, const char[] classname) {
+    // Guard newly created objective entities outside live game
+    if (g_eCurrentState == STATE_LIVE_GAME) return;
+    if (!IsValidEntity(entity)) return;
+
+    if (StrEqual(classname, "trigger_capture_area") || StrEqual(classname, "func_capturezone")) {
+        AcceptEntityInput(entity, "Disable");
+    } else if (StrEqual(classname, "team_control_point") || StrEqual(classname, "team_control_point_master")) {
+        AcceptEntityInput(entity, "Lock");
+        AcceptEntityInput(entity, "Disable");
+    } else if (StrEqual(classname, "team_round_timer") || StrEqual(classname, "tf_logic_koth")) {
+        AcceptEntityInput(entity, "Disable");
+    } else if (StrEqual(classname, "item_teamflag")) {
+        AcceptEntityInput(entity, "Disable");
+    }
+}
+
+// ========================================
 // DM MODULE INTEGRATION
 // ========================================
 
 // DM module control functions
 void DM_SetPreGameActive(bool active) {
-    if (g_bDMPluginLoaded) {
-        ServerCommand("sm_mix_dm_pregame_active %d", active ? 1 : 0);
-    }
+    // Always attempt to set; harmless if DM module absent
+    SetCvarInt("sm_mix_dm_pregame_active", active ? 1 : 0);
 }
 
 void DM_SetDraftInProgress(bool inProgress) {
-    if (g_bDMPluginLoaded) {
-        ServerCommand("sm_mix_dm_draft_in_progress %d", inProgress ? 1 : 0);
-    }
+    SetCvarInt("sm_mix_dm_draft_in_progress", inProgress ? 1 : 0);
 }
 
 void DM_StopAllFeatures() {
-    if (g_bDMPluginLoaded) {
-        ServerCommand("sm_mix_dm_stop_all 1");
-    }
+    SetCvarInt("sm_mix_dm_stop_all", 1);
 }
 
 // ========================================

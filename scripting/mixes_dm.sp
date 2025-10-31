@@ -12,7 +12,7 @@ public Plugin myinfo = {
     name = "TF2-Mixes DM Module",
     author = "vexx-sm",
     description = "DM features for TF2-Mixes plugin",
-    version = "0.3.1",
+    version = "0.3.2",
     url = "https://github.com/vexx-sm/TF2-Mixes"
 };
 
@@ -45,6 +45,10 @@ bool g_bSpawnRandom;
 bool g_bTeamSpawnRandom;
 ConVar g_hTeamSpawnRandom;
 ConVar g_hSpawnRandom;
+ConVar g_hSpawnDelay;
+ConVar g_hNoVelocityOnSpawn;
+float g_fSpawnDelay = 0.1;
+bool g_bNoVelocityOnSpawn = true;
 ArrayList g_hRedSpawns;
 ArrayList g_hBluSpawns;
 Handle g_hKv;
@@ -103,6 +107,8 @@ public void OnPluginStart() {
     // Spawn system convars
     g_hSpawnRandom = CreateConVar("sm_mix_spawnrandom", "1", "Enable random spawns.", FCVAR_NOTIFY);
     g_hTeamSpawnRandom = CreateConVar("sm_mix_teamspawnrandom", "0", "Enable random spawns independent of team", FCVAR_NOTIFY);
+    g_hSpawnDelay = CreateConVar("sm_mix_dm_spawn_delay", "0.1", "Delay after spawn before DM teleport.", FCVAR_NOTIFY);
+    g_hNoVelocityOnSpawn = CreateConVar("sm_mix_dm_novelocity", "1", "Zero player velocity on DM teleport.", FCVAR_NOTIFY);
 
     // Communication ConVars from main plugin
     g_hDMPreGameActive = CreateConVar("sm_mix_dm_pregame_active", "0", "DM pre-game active state (controlled by main plugin)", FCVAR_DONTRECORD);
@@ -126,6 +132,8 @@ public void OnPluginStart() {
     HookConVarChange(g_hRegenDelay, OnRegenConVarChanged);
     HookConVarChange(g_hKillStartRegen, OnRegenConVarChanged);
     HookConVarChange(g_cvPreGameEnable, OnPreGameEnableChanged);
+    HookConVarChange(g_hSpawnDelay, OnSpawnConVarChanged);
+    HookConVarChange(g_hNoVelocityOnSpawn, OnSpawnConVarChanged);
     
     // Hook communication ConVars from main plugin
     HookConVarChange(g_hDMPreGameActive, OnDMPreGameActiveChanged);
@@ -138,6 +146,10 @@ public void OnPluginStart() {
         g_bRegen[i] = false;
         g_iMaxHealth[i] = 0;
     }
+
+    // Initialize spawn cvar cache
+    g_fSpawnDelay = GetConVarFloat(g_hSpawnDelay);
+    g_bNoVelocityOnSpawn = GetConVarBool(g_hNoVelocityOnSpawn);
 }
 
 public Action Timer_CheckMainPlugin(Handle timer) {
@@ -227,16 +239,18 @@ public Action Event_PlayerSpawn(Event event, const char[] name, bool dontBroadca
         
     // Only enable DM when globally enabled and during pre-game (before draft starts)
     if (IsDMActive()) {
-        // Reset movement flag - player will teleport on first movement
-        g_bPlayerMoved[client] = false;
+        // Apply brief invulnerability during teleport window
         float prot = GetConVarFloat(g_cvPreGameSpawnProtect);
         if (prot > 0.0) {
             TF2_AddCondition(client, TFCond_UberchargedHidden, prot);
         }
-        
+
         // Store max health for regen system
         g_iMaxHealth[client] = GetClientHealth(client);
-        
+
+        // Teleport to a safe random spawn shortly after spawn
+        CreateTimer(g_fSpawnDelay, RandomSpawn, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
+
         // Start health regen after spawn protection - only if enabled
         if (g_iRegenHP > 0) {
             CreateTimer(prot, StartRegen, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
@@ -338,32 +352,7 @@ public Action Event_PlayerHurt(Event event, const char[] name, bool dontBroadcas
 }
 
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon, int &subtype, int &cmdnum, int &tickcount, int &seed, int mouse[2]) {
-    if (!IsValidClient(client) || !IsPlayerAlive(client)) {
-        return Plugin_Continue;
-    }
-
-    // Check if player is in DM and hasn't moved yet (only when globally enabled and during pre-game)
-    if (IsDMActive() && !g_bPlayerMoved[client]) {
-        // Check for movement (WASD keys) - only trigger once
-        if (buttons & (IN_FORWARD | IN_BACK | IN_MOVELEFT | IN_MOVERIGHT)) {
-            g_bPlayerMoved[client] = true;
-            
-            // Teleport to random spawn
-            float origin[3];
-            if (GetSpawnPoint(client, origin)) {
-                // Find ground level to prevent spawning underground
-                float groundOrigin[3];
-                if (FindGroundLevel(origin, groundOrigin)) {
-                    origin = groundOrigin;
-                }
-                
-                float spawnAngles[3] = {0.0, 0.0, 0.0};
-                float zeroVel[3] = {0.0, 0.0, 0.0};
-                TeleportEntity(client, origin, spawnAngles, zeroVel);
-            }
-        }
-    }
-    
+    // Movement-based teleport disabled; spawns handled on player_spawn.
     return Plugin_Continue;
 }
 
@@ -512,6 +501,11 @@ void ResetAllPlayersRegen() {
     }
 }
 
+public void OnSpawnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue) {
+    g_fSpawnDelay = GetConVarFloat(g_hSpawnDelay);
+    g_bNoVelocityOnSpawn = GetConVarBool(g_hNoVelocityOnSpawn);
+}
+
 // ========================================
 // RANDOM SPAWN SYSTEM
 // ========================================
@@ -534,8 +528,8 @@ void LoadSpawnPoints() {
         g_hKv = null;
     }
     
-    g_hRedSpawns = new ArrayList(3);
-    g_hBluSpawns = new ArrayList(3);
+    g_hRedSpawns = new ArrayList(6);
+    g_hBluSpawns = new ArrayList(6);
     g_hKv = new KeyValues("Spawns");
     
     char map[64];
@@ -560,18 +554,26 @@ void LoadMapConfig(const char[] path) {
 }
 
 void LoadSpawnsFromConfig() {
-    // Load spawns from config with correct format (origin + angles)
+    // Load spawns from config (origin + angles)
+    float vectors[6];
+    float origin[3];
+    float angles[3];
+
     if (KvJumpToKey(g_hKv, "red", false)) {
         if (KvGotoFirstSubKey(g_hKv, false)) {
             do {
                 char originStr[64];
+                char anglesStr[64];
                 KvGetString(g_hKv, "origin", originStr, sizeof(originStr));
-                
-                if (strlen(originStr) > 0) {
-                    float origin[3];
-                    if (StringToVector(originStr, origin)) {
-                        g_hRedSpawns.PushArray(origin);
+                KvGetString(g_hKv, "angles", anglesStr, sizeof(anglesStr));
+
+                if (strlen(originStr) > 0 && StringToVector(originStr, origin)) {
+                    if (strlen(anglesStr) == 0 || !StringToVector(anglesStr, angles)) {
+                        angles[0] = 0.0; angles[1] = 0.0; angles[2] = 0.0;
                     }
+                    vectors[0] = origin[0]; vectors[1] = origin[1]; vectors[2] = origin[2];
+                    vectors[3] = angles[0]; vectors[4] = angles[1]; vectors[5] = 0.0; // zero roll
+                    g_hRedSpawns.PushArray(vectors);
                 }
             } while (KvGotoNextKey(g_hKv, false));
             KvGoBack(g_hKv);
@@ -583,13 +585,17 @@ void LoadSpawnsFromConfig() {
         if (KvGotoFirstSubKey(g_hKv, false)) {
             do {
                 char originStr[64];
+                char anglesStr[64];
                 KvGetString(g_hKv, "origin", originStr, sizeof(originStr));
-                
-                if (strlen(originStr) > 0) {
-                    float origin[3];
-                    if (StringToVector(originStr, origin)) {
-                        g_hBluSpawns.PushArray(origin);
+                KvGetString(g_hKv, "angles", anglesStr, sizeof(anglesStr));
+
+                if (strlen(originStr) > 0 && StringToVector(originStr, origin)) {
+                    if (strlen(anglesStr) == 0 || !StringToVector(anglesStr, angles)) {
+                        angles[0] = 0.0; angles[1] = 0.0; angles[2] = 0.0;
                     }
+                    vectors[0] = origin[0]; vectors[1] = origin[1]; vectors[2] = origin[2];
+                    vectors[3] = angles[0]; vectors[4] = angles[1]; vectors[5] = 0.0; // zero roll
+                    g_hBluSpawns.PushArray(vectors);
                 }
             } while (KvGotoNextKey(g_hKv, false));
             KvGoBack(g_hKv);
@@ -599,26 +605,34 @@ void LoadSpawnsFromConfig() {
 }
 
 void LoadDefaultSpawns() {
-    // Default spawn loading
+    // Default spawn loading with angles from entity rotation
     int ent = -1;
+    float origin[3];
+    float angles[3];
+    float vectors[6];
     while ((ent = FindEntityByClassname(ent, "info_player_teamspawn")) > 0) {
         if (!IsValidEntity(ent)) continue;
-        
-        float origin[3];
+
         GetEntPropVector(ent, Prop_Send, "m_vecOrigin", origin);
-        
+        // Try Prop_Data first, then fall back
+        if (!GetEntPropVector(ent, Prop_Data, "m_angRotation", angles)) {
+            angles[0] = 0.0; angles[1] = 0.0; angles[2] = 0.0;
+        }
+        vectors[0] = origin[0]; vectors[1] = origin[1]; vectors[2] = origin[2];
+        vectors[3] = angles[0]; vectors[4] = angles[1]; vectors[5] = 0.0; // zero roll
+
         int team = GetEntProp(ent, Prop_Send, "m_iTeamNum");
-        
         if (team == 2) {
-            g_hRedSpawns.PushArray(origin);
+            g_hRedSpawns.PushArray(vectors);
         } else if (team == 3) {
-            g_hBluSpawns.PushArray(origin);
+            g_hBluSpawns.PushArray(vectors);
         }
     }
 }
 
-public bool TraceFilter_NoPlayers(int entity, int contentsMask) {
-    return entity == 0;
+public bool TraceFilter_None(int entity, int contentsMask) {
+    // Do not filter any entity; we want to detect both players and world geometry
+    return false;
 }
 
 void GetCurrentMapLowercase(char[] map, int sizeofMap) {
@@ -644,52 +658,86 @@ bool StringToVector(const char[] str, float vec[3]) {
     return true;
 }
 
-bool GetSpawnPoint(int client, float origin[3]) {
-    // Spawn point selection
-    if (!g_bSpawnRandom) {
-        return false;
+public Action RandomSpawn(Handle timer, any clientid) {
+    int client = GetClientOfUserId(clientid);
+    if (!IsValidClient(client) || !IsPlayerAlive(client) || !IsDMActive()) {
+        return Plugin_Stop;
     }
-    
+
+    if (!g_bSpawnRandom) {
+        return Plugin_Stop;
+    }
+
+    // Choose spawn list
     int team = GetClientTeam(client);
     ArrayList spawns = null;
-    
     if (g_bTeamSpawnRandom) {
-        // Use all spawns regardless of team
-        spawns = new ArrayList(3);
-        for (int i = 0; i < g_hRedSpawns.Length; i++) {
-            float spawn[3];
-            g_hRedSpawns.GetArray(i, spawn);
-            spawns.PushArray(spawn);
-        }
-        for (int i = 0; i < g_hBluSpawns.Length; i++) {
-            float spawn[3];
-            g_hBluSpawns.GetArray(i, spawn);
-            spawns.PushArray(spawn);
+        // Pick a random team list
+        spawns = (GetRandomInt(0, 1) == 0) ? g_hRedSpawns : g_hBluSpawns;
+        if (spawns.Length == 0) {
+            spawns = (spawns == g_hRedSpawns) ? g_hBluSpawns : g_hRedSpawns;
         }
     } else {
-        // Use team-specific spawns
-        if (team == 2) {
-            spawns = g_hRedSpawns;
-        } else if (team == 3) {
-            spawns = g_hBluSpawns;
-        }
+        spawns = (team == 2) ? g_hRedSpawns : (team == 3 ? g_hBluSpawns : null);
     }
-    
+
     if (spawns == null || spawns.Length == 0) {
-        if (g_bTeamSpawnRandom && spawns != null) {
-            delete spawns;
+        return Plugin_Stop;
+    }
+
+    int rand = GetRandomInt(0, spawns.Length - 1);
+    float vectors[6];
+    spawns.GetArray(rand, vectors);
+
+    float origin[3];
+    float angles[3];
+    origin[0] = vectors[0]; origin[1] = vectors[1]; origin[2] = vectors[2];
+    angles[0] = vectors[3]; angles[1] = vectors[4]; angles[2] = 0.0;
+
+    // Validate: outside world?
+    if (TR_PointOutsideWorld(origin)) {
+        // Remove bad spawn and retry
+        RemoveSpawnAt(spawns, rand);
+        CreateTimer(0.1, RandomSpawn, clientid, TIMER_FLAG_NO_MAPCHANGE);
+        return Plugin_Stop;
+    }
+
+    // Hull check for collisions with world or players
+    float mins[3] = {-24.0, -24.0, 0.0};
+    float maxs[3] = {24.0, 24.0, 82.0};
+    TR_TraceHullFilter(origin, origin, mins, maxs, MASK_PLAYERSOLID, TraceFilter_None);
+    if (TR_DidHit()) {
+        int ent = TR_GetEntityIndex();
+        if (ent > 0 && ent <= MaxClients) {
+            // Occupied by a player; try another spawn
+            CreateTimer(0.1, RandomSpawn, clientid, TIMER_FLAG_NO_MAPCHANGE);
+            return Plugin_Stop;
+        } else {
+            // Clipping world or prop; delete this spawn and retry
+            RemoveSpawnAt(spawns, rand);
+            CreateTimer(0.1, RandomSpawn, clientid, TIMER_FLAG_NO_MAPCHANGE);
+            return Plugin_Stop;
         }
-        return false;
     }
-    
-    int randomIndex = GetRandomInt(0, spawns.Length - 1);
-    spawns.GetArray(randomIndex, origin);
-    
-    if (g_bTeamSpawnRandom && spawns != null) {
-        delete spawns;
+
+    // Teleport: optionally zero velocity
+    float zeroVel[3] = {0.0, 0.0, 0.0};
+    if (g_bNoVelocityOnSpawn) {
+        TeleportEntity(client, origin, angles, zeroVel);
+    } else {
+        TeleportEntity(client, origin, angles, NULL_VECTOR);
     }
-    
-    return true;
+
+    // Remove temporary invulnerability if still present
+    TF2_RemoveCondition(client, TFCond_UberchargedHidden);
+
+    return Plugin_Stop;
+}
+
+void RemoveSpawnAt(ArrayList list, int index) {
+    if (list != null && index >= 0 && index < list.Length) {
+        list.Erase(index);
+    }
 }
 
 bool FindGroundLevel(const float origin[3], float groundOrigin[3]) {
@@ -701,7 +749,7 @@ bool FindGroundLevel(const float origin[3], float groundOrigin[3]) {
     traceEnd = origin;
     traceEnd[2] -= 1000.0; // Trace down 1000 units
     
-    TR_TraceRayFilter(traceStart, traceEnd, MASK_SOLID, RayType_EndPoint, TraceFilter_NoPlayers);
+    TR_TraceRayFilter(traceStart, traceEnd, MASK_SOLID, RayType_EndPoint, TraceFilter_None);
     
     if (TR_DidHit()) {
         TR_GetEndPosition(groundOrigin);
