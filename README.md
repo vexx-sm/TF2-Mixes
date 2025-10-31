@@ -3,9 +3,10 @@
 
 
 A SourceMod plugin that sets up a **6v6 competitive mix** where 2 captains pick players in an **XYXY** order. Includes random drafting, votes, and more.
-
 > [!NOTE]
-> A Discord bot is included to manage mixes in a TF2Center-style. It’s under dev and requires version [0.3.2b](https://github.com/vexx-sm/TF2-Mixes/releases/tag/0.3.2b).
+> A Discord bot is included to manage mixes in a [TF2Center-style](https://github.com/user-attachments/assets/d4937683-8185-4504-979d-f7c564fb59cf) setup. It’s under dev and requires version [0.3.2b](https://github.com/vexx-sm/TF2-Mixes/releases/tag/0.3.2b).
+
+
 
 <p align="center">
   <a href="https://discord.com/oauth2/authorize?client_id=1429868144322936895&permissions=347136&scope=bot%20applications.commands">
