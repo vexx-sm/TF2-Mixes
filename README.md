@@ -1,12 +1,10 @@
 <h1 align="center">Team Fortress 2 Mixes</h1>
 
 
-
 A SourceMod plugin that sets up a **6v6 competitive mix** where 2 captains pick players in an **XYXY** order. Includes random drafting, votes, and more.
+
 > [!NOTE]
-> A Discord bot is included to manage mixes in a [TF2Center-style](https://github.com/user-attachments/assets/d4937683-8185-4504-979d-f7c564fb59cf) setup. It’s under dev and requires version [0.3.3b](https://github.com/vexx-sm/TF2-Mixes/releases/tag/0.3.3b).
-
-
+> A Discord bot is included to manage mixes in a [TF2Center-style](https://github.com/user-attachments/assets/9435c637-0174-4d7f-b3a2-2d9b3604e428) setup. It’s under dev and requires version [0.3.3b](https://github.com/vexx-sm/TF2-Mixes/releases/tag/0.3.3b).
 
 <p align="center">
   <a href="https://discord.com/oauth2/authorize?client_id=1429868144322936895&permissions=347136&scope=bot%20applications.commands">
