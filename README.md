@@ -6,7 +6,7 @@ A SourceMod plugin that sets up a **6v6 competitive mix** where 2 captains pick 
 > A Discord bot is included to manage mixes in a [TF2Center-style](https://github.com/user-attachments/assets/9435c637-0174-4d7f-b3a2-2d9b3604e428) setup. It’s under dev and requires version [0.3.3b](https://github.com/vexx-sm/TF2-Mixes/releases/tag/0.3.3b).
 
 <p align="center">
-  <a href="https://discord.com/oauth2/authorize?client_id=1429868144322936895&permissions=355392&scope=bot%20applications.commands">
+  <a href="https://discord.com/oauth2/authorize?client_id=1429868144322936895&permissions=486464&scope=bot%20applications.commands">
     <img src="https://img.shields.io/badge/Add%20to%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white&labelColor=4f5bd5" alt="Invite Bot"/>
   </a>
 </p>
