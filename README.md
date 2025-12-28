@@ -3,7 +3,7 @@
 A SourceMod plugin that sets up a **6v6 competitive mix** where 2 captains pick players in an **XYXY** order. Includes random drafting, votes, and more.
 
 > [!NOTE]
-> A Discord bot is included to manage mixes in a [TF2Center-style](https://github.com/user-attachments/assets/9435c637-0174-4d7f-b3a2-2d9b3604e428) setup. It’s under dev and requires version [0.3.3b](https://github.com/vexx-sm/TF2-Mixes/releases/tag/0.3.3b).
+> A Discord bot is included to manage mixes in a [TF2Center-style](https://github.com/user-attachments/assets/9435c637-0174-4d7f-b3a2-2d9b3604e428) setup. It’s under dev and requires version [0.4.3b](https://github.com/vexx-sm/TF2-Mixes/releases/tag/0.4.3b).
 
 <p align="center">
   <a href="https://discord.com/oauth2/authorize?client_id=1429868144322936895&permissions=268921936&scope=bot%20applications.commands">
@@ -25,13 +25,16 @@ https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
 - Picked players are auto-moved to their captain's team.  
 - Each captain has **30s per turn**; if the timer expires, a random player is picked.  
 - Captains may use `!remove` to drop a player (counts as a turn).  
+- Captains may use `!swap x y` to request a player for player swap between teams.
 - When both teams reach 6v6, a **10s countdown** begins before the game starts.  
 
 ### 3. Game Phase
-- Players may change class, but **not teams**.  
+- Players may change class, but **not teams**. 
+- Offclassing is punished outside of last point hodlds.
+- Players can !rep x or !rep me to report and request a replacement of a player.
 - At the end of each round, players vote to either:  
   - Continue with same teams  
-  - Start a new draft  
+  - Start a new draft 
 - Any vote requires **30% of players to initiate**, and passes with **⅔ majority**.  
 
 > [!NOTE]
@@ -45,6 +48,7 @@ https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
 - `!captain` / `!cap` — Become or drop as captain  
 - `!draft` / `!pick` — Open draft menu (only current captain, during their turn)  
 - `!draft <player>` / `!pick <player>` — Pick a player by name (partial names work)  
+- `!swap <player1> <player2>` / `!swap` For a menu instead - Propose a player for player swap between teams.
 - `!remove` — Remove a player from your team (counts as a turn)  
 - `!rep` — Remove yourself during draft  
 - `!restart` / `!redraft` — Start a vote to restart the draft (requires 2/3 of players to pass)  
