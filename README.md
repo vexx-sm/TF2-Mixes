@@ -3,7 +3,7 @@
 A SourceMod plugin that sets up a **6v6 competitive mix** where 2 captains pick players in an **XYXY** order. Includes random drafting, votes, and more.
 
 > [!NOTE]
-> A Discord bot is included to manage mixes in a [TF2Center-style](https://github.com/user-attachments/assets/9435c637-0174-4d7f-b3a2-2d9b3604e428) setup. It’s under dev and requires version [0.4.3b](https://github.com/vexx-sm/TF2-Mixes/releases/tag/0.4.3b).
+> A Discord bot is included to manage mixes in a [TF2Center-style](https://github.com/user-attachments/assets/9435c637-0174-4d7f-b3a2-2d9b3604e428) setup with [Announcements](https://github.com/user-attachments/assets/eab70e8c-23f3-4764-b071-e4d4d917a2b2), [History](https://github.com/user-attachments/assets/3ebaa6eb-b1ec-4948-a2d0-2d8d3538383d) fully managed VC and much more [integration](https://github.com/user-attachments/assets/1970b8f6-16bb-44b3-9110-58a87d0e728f). It’s under dev and requires version [0.4.3b](https://github.com/vexx-sm/TF2-Mixes/releases/tag/0.4.3b).
 
 <p align="center">
   <a href="https://discord.com/oauth2/authorize?client_id=1429868144322936895&permissions=268921936&scope=bot%20applications.commands">
@@ -87,12 +87,9 @@ https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
 **Requests & Contributions are welcome!**
 
 <details>
-<summary>what next?</summary>
-
-- Configurable team sizes (4v4, 6v6, Highlander)  
-- Configurable voting thresholds and options  
-- New admin cmds: `sm_forcestart`, `sm_shuffle`  
-- Better handling of spectators/late-joins  
-- Match QoL: auto-pause and ready-up system  
-- Full Discord bot integration.  
+<summary>Current discord bot:</summary>
+<img width="576" height="698" alt="mix discord" src="https://github.com/user-attachments/assets/9b49a50f-980d-4538-a212-6d2768de81fc" />
+<img width="587" height="446" alt="image33" src="https://github.com/user-attachments/assets/f79367e9-04c3-401d-98b0-8e161ca475db" />
+<img width="471" height="215" alt="rep" src="https://github.com/user-attachments/assets/4f354bae-feaf-4600-a4ec-b7bd114c57a3" />
+<img width="570" height="373" alt="statsandtacking" src="https://github.com/user-attachments/assets/8e05a221-e47f-47f0-805e-422cde6b9a5e" />
 </details>
