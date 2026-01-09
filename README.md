@@ -42,7 +42,7 @@ https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
 
 ## Commands
 
-> Most commands support multiple aliases for convenience (e.g., `!restart`, `!redraft`, `!reset`)
+> Most commands support 3+ aliases for convenience (e.g `!restart`, `!redraft`, `!reset`)
 
 ### Player Commands
 - `!captain` / `!cap` — Become or drop as captain  
