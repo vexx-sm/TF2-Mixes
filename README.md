@@ -30,7 +30,7 @@ https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
 
 ### 3. Game Phase
 - Players may change class, but **not teams**. 
-- Offclassing is punished outside of last point hodlds.
+- Offclassing is punished outside of last point holds.
 - Players can !rep x or !rep me to report and request a replacement of a player.
 - At the end of each round, players vote to either:  
   - Continue with same teams  
