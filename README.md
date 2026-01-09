@@ -46,7 +46,7 @@ https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
 
 ### Player Commands
 - `!captain` / `!cap` — Become or drop as captain  
-- `!draft` / `!pick` — Open draft menu (only current captain during their turn)  
+- `!draft` / `!pick` — Open a menu of available picks (only current captain during their turn)  
 - `!draft <player>` / `!pick <player>` — Pick a player by name (partial names work)  
 - `!swap <player1> <player2>` / `!swap` For a menu instead - Propose a player for player swap between teams.
 - `!remove` — Remove a player from your team (counts as a turn)  
