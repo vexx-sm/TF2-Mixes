@@ -26,12 +26,12 @@ https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
 - Picked players are auto-moved to their captain's team.  
 - Each captain has **30s per turn**; if the timer expires, a random player is picked.  
 - Captains may use `!remove` to drop a player (counts as a turn).  
-- Captains may use `!swap x y` to request a player for player swap between teams.
+- Captains may use `!swap x y` to request a player for player swap between teams (counts as a turn).
 
 ### 3. Game Phase
 - Players may change class, but **not teams**. 
 - Offclassing is punished outside of last point holds.
-- Players can !rep x or !rep me to report and request a replacement of a player.
+- Players can `!rep x` or `!rep me` to report and request a replacement of a player.
 - At the end of each round, players vote to either:  
   - Continue with same teams  
   - Start a new draft 
