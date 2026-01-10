@@ -77,7 +77,7 @@ Essintially the plugin cycles a game through 3 phases, `Pre-Game` > `Draft` > `L
 
 **Requests & Contributions are welcome!**
 
-<summary>Current discord bot:</summary>
+<summary>Discord bot examples:</summary>
 <img width="576" height="698" alt="mix discord" src="https://github.com/user-attachments/assets/9b49a50f-980d-4538-a212-6d2768de81fc" />
 <img width="587" height="446" alt="image33" src="https://github.com/user-attachments/assets/f79367e9-04c3-401d-98b0-8e161ca475db" />
 <img width="471" height="215" alt="rep" src="https://github.com/user-attachments/assets/4f354bae-feaf-4600-a4ec-b7bd114c57a3" />
