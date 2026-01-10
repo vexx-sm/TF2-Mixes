@@ -35,10 +35,6 @@ Essintially the plugin cycles a game through 3 phases, `Pre-Game` > `Draft` > `L
 - Any vote requires **30% of players to initiate**, and passes with **⅔ majority**.  
 - Followed by Post Game with a vote to restart game or reset teams.
 
-
-> [!NOTE]
-> Pre-game DM requires the provided [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.3.1/configs.zip) for now.
-
 ## Commands
 
 > Most commands support 3+ aliases for convenience (e.g `!restart`, `!redraft`, `!reset`)
