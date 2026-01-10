@@ -1,4 +1,4 @@
-<h1 align="center">Team Fortress 2 Pugs/Mixes</h1>
+
 
 A SourceMod plugin that sets up a **6s/hl PUGs** where 2 captains pick players in an **XYXY** order or slot based on discord. Includes random drafting, votes, and more.
 
