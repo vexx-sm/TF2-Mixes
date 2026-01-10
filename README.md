@@ -57,7 +57,7 @@ Essintially the plugin cycles a game through 3 phases, `Pre-Game` > `Draft` > `L
 - `!cancelmix` — Cancel the current mix  
 - `!updatemix` — Check for and download plugin updates (auto install and reload)  
 - `!rup` — Force both teams ready  
-- `!outline` — Toggle teammate outlines for both teams :  
+- `!outline` — Toggle teammate outlines for both teams (through walls) :  
 
 <p>
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
