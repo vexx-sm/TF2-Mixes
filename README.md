@@ -1,5 +1,3 @@
-
-
 A SourceMod plugin that sets up a **6s/hl PUGs** where 2 captains pick players in an **XYXY** order or slot based on discord. Includes random drafting, votes, and more.
 
 > [!NOTE]
@@ -71,9 +69,9 @@ Essintially the plugin cycles a game through 3 phases, `Pre-Game` > `Draft` > `L
 </p>
 
 ## Installation
-1. Download the latest **SourceMod** version [here](https://www.sourcemod.net/downloads.php?branch=stable).  
-2. Download the latest **`mixes.smx`** / **`mixes_dm`** from the [Releases](https://github.com/vexx-sm/TF2-Mixes/releases) page.  
-3. Place it in your `sourcemod/plugins` folder.  
+1. Download the latest **`mixes.smx`** / **`mixes_dm.smx`** / **`configs.zip`** from the [Releases](https://github.com/vexx-sm/TF2-Mixes/releases) page.  
+2. Place **`mixes.smx`** / **`mixes_dm.smx`** in your `sourcemod/plugins` folder.
+3. unzip **`configs.zip`** in your `tf2/tf/addons/sourcemod/`
 4. Reload the plugin or restart your server.  
 
 > [!WARNING]
