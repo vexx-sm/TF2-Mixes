@@ -15,44 +15,45 @@ A SourceMod plugin that sets up a **6s/hl PUGs** where 2 captains pick players i
 https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
 
 ## How It Works
+Essintially the plugin cycles a game through 3 phases, `Pre-Game` > `Draft` > `Live Game` <>
 
-### 1. Setup Phase
+### 1.  Pre Game
 - Players use `!captain` or `!cap` to become (or drop as) a captain.  
 - Once two captains are selected **and at least 12 players are present**, all others are moved to spectator.  
-- Captains are randomly assigned to RED or BLU.  
+- Captains are randomly assigned to RED or BLU.
 
-### 2. Drafting Phase
+### 2. Draft 
 - Captains pick players in order (XYXY XYXY XY).  
 - Picked players are auto-moved to their captain's team.  
 - Each captain has **30s per turn**; if the timer expires, a random player is picked.  
-- Captains may use `!remove` to drop a player (counts as a turn).  
+- Captains and players may use `!remove` to drop a player or themselves (counts as a turn).  
 - Captains may use `!swap x y` to request a player for player swap between teams (counts as a turn).
+- Followed by RUP where players are auto moved to thier vc and waiting for ready up.
 
-### 3. Game Phase
+### 3. Live Game
 - Players may change class, but **not teams**. 
 - Offclassing is punished outside of last point holds.
 - Players can `!rep x` or `!rep me` to report and request a replacement of a player.
-- At the end of each round, players vote to either:  
-  - Continue with same teams  
-  - Start a new draft 
 - Any vote requires **30% of players to initiate**, and passes with **⅔ majority**.  
+- Followed by Post Game with a vote to restart game or reset teams.
+
 
 > [!NOTE]
-> Pre-game DM requires the provided [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.3.1/configs.zip), otherwise random spawns won't work.
+> Pre-game DM requires the provided [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.3.1/configs.zip) for now.
 
 ## Commands
 
 > Most commands support 3+ aliases for convenience (e.g `!restart`, `!redraft`, `!reset`)
 
-### Player Commands
+### Player Commands 
 - `!captain` / `!cap` — Become or drop as captain  
 - `!draft` / `!pick` — Open a menu of available picks (only current captain during their turn)  
 - `!draft <player>` / `!pick <player>` — Pick a player by name (partial names work)  
 - `!swap <player1> <player2>` / `!swap` For a menu instead - Propose a player for player swap between teams.
-- `!remove` — Remove yourself or a player from your team as a Captain (counts as a turn) [Draft/RUP phase only]
+- `!remove` — Remove yourself or a player from your team (counts as a turn) [Draft/RUP phase only]
 - `!rep x` / `!rep me` - Replace yourself or a player on your team (integrated with discord) [Live Game phase only]
 - `!restart` / `!redraft` — Start a vote to restart the draft (requires 2/3 of players to pass)  
-- `!helpmix` — Show help menu  
+- `!helpmix` / `!help` — Show all commands 
 
 ### Admin Commands
 - `!setcaptain <player>` — Set/remove a captain  
@@ -62,7 +63,7 @@ https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
 - `!cancelmix` — Cancel the current mix  
 - `!updatemix` — Check for and download plugin updates (auto install and reload)  
 - `!rup` — Force both teams ready  
-- `!outline` — Toggle teammate outlines for both teams  
+- `!outline` — Toggle teammate outlines for both teams :  
 
 <p>
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -71,13 +72,9 @@ https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
 
 ## Installation
 1. Download the latest **SourceMod** version [here](https://www.sourcemod.net/downloads.php?branch=stable).  
-2. Download the latest **`mixes.smx`** from the [Releases](https://github.com/vexx-sm/TF2-Mixes/releases) page.  
+2. Download the latest **`mixes.smx`** / **`mixes_dm`** from the [Releases](https://github.com/vexx-sm/TF2-Mixes/releases) page.  
 3. Place it in your `sourcemod/plugins` folder.  
 4. Reload the plugin or restart your server.  
-
-   **Optional:**  
-   - `mixes_dm.smx` provides DM features (health regen, random spawns). It's recommended for pre-game DM.  
-   - Random spawns require these [configs](https://github.com/vexx-sm/TF2-Mixes/releases/download/0.3.1/configs.zip), extract in `tf2/tf/addons/sourcemod/configs`.
 
 > [!WARNING]
 > The plugin currently may conflict with SOAPdm, temporarily disable it for a proper experience.
