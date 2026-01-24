@@ -34,7 +34,7 @@ Essintially the plugin cycles a game through 3 phases, `Pre-Game` > `Draft` > `L
 - Any vote requires **30% of players to initiate**, and passes with **⅔ majority**.  
 - Followed by Post Game with a vote to restart game or reset teams.
 
-## Commands
+## Commands (`!` or `/` prefix)
 
 > Most commands support 3+ aliases for convenience (e.g `!restart`, `!redraft`, `!reset`)
 
@@ -56,7 +56,7 @@ Essintially the plugin cycles a game through 3 phases, `Pre-Game` > `Draft` > `L
 - `!cancelmix` — Cancel the current mix  
 - `!updatemix` — Check for and download plugin updates (auto install and reload)  
 - `!rup` — Force both teams ready
-- `!cleanupstuck` (temp) — Clears up the bot and game state if stuck
+- `!cleanupstuck` (discord) — Clears up the bot and game state if stuck
 - `!outline` — Toggle teammate outlines for both teams (through walls) :  
 
 <p>
