@@ -55,7 +55,8 @@ Essintially the plugin cycles a game through 3 phases, `Pre-Game` > `Draft` > `L
 - `!randommix` — Selects random captains and random teams  
 - `!cancelmix` — Cancel the current mix  
 - `!updatemix` — Check for and download plugin updates (auto install and reload)  
-- `!rup` — Force both teams ready  
+- `!rup` — Force both teams ready
+- `!cleanupstuck` (temp) — Clears up the bot and game state if stuck
 - `!outline` — Toggle teammate outlines for both teams (through walls) :  
 
 <p>
