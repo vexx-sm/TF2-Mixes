@@ -11,7 +11,7 @@ assignees: vexx-sm
 A clear description of what the bug is.
 
 **To Reproduce**
-Steps to reproduce the behavior.
+Steps to reproduce the behavior. 
 
-**Screenshots**
-If available, add screenshots showing the bug.
+**Extra info**
+If available, add screenshots/context.
