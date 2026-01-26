@@ -29,7 +29,7 @@ Essintially the plugin cycles a game through 3 phases, `Pre-Game` > `Draft` > `L
 
 ### 3. Live Game
 - Players may change class, but **not teams**. 
-- Offclassing is punished outside of last point holds.
+- Offclassing is punished outside of last point holds on 6s cp_ maps only.
 - Players can `!rep x` or `!rep me` to report and request a replacement of a player.
 - Any vote requires **30% of players to initiate**, and passes with **⅔ majority**.  
 - Followed by Post Game with a vote to restart game or reset teams.
