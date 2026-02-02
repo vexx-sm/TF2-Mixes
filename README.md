@@ -58,7 +58,6 @@ Essintially the plugin cycles a game through 3 phases, `Pre-Game` > `Draft` > `L
 - `!rup` — Force both teams ready
 - `!cleanupstuck` (discord) — Clears up the bot and game state if stuck
 - `!outline` — Toggle teammate outlines for both teams (through walls) :  
-
 <p>
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   <img width="521" height="329" alt="Screenshot_1" src="https://github.com/user-attachments/assets/9d89a489-7251-4fe0-8874-38ab7ce853ef" />
@@ -72,6 +71,9 @@ Essintially the plugin cycles a game through 3 phases, `Pre-Game` > `Draft` > `L
 
 > [!WARNING]
 > The plugin currently may conflict with SOAPdm, temporarily disable it for a proper experience.
+
+> [!WARNING]
+> Linking your server with the Discord bot may fail under some hosting services, use `/ip` in game to override the public ip of your hosting machine before registering on discord
 
 ---
 
