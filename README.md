@@ -40,16 +40,15 @@ Essentially the plugin cycles a game through 3 phases: `Pre-Game` ➔ `Draft` �
 * Captains are randomly assigned to RED or BLU.
 
 ### 🟡 2. Draft 
-* Captains pick players in sequence (**XYXY XYXY XY**). 
-* Captains have a timed window to pick; failing to do so triggers a random pick.
-* Use `!remove` to drop a yourself or a player or `!swap x y` (as a captain) to propose a trade.
+* Captains take turns picking players `!draft` (**XYXY XYXY XY**). 
+* Use `!remove` to drop a yourself or a player / `!swap x y` (as a captain) to propose a trade.
 * Followed by **RUP** where players are moved to their VCs.
 
 ### 🟢 3. Live Game
-* **Restrictions:** Offclassing is restricted outside of last point holds (6s cp_ maps).
-* **Subs:** Players can `!rep x` or `!rep me` to request a replacement via Discord.
-* **Voting:** Requires **30% to initiate** and passes with a **⅔ majority**.  
-* **End:** Concludes with a vote to restart the game or reset teams.
+* Offclassing is restricted outside of last point holds (6s cp_ maps) by default.
+* Players can `!rep x` or `!rep me` to request a replacement via Discord.
+* Requires **30% to initiate** and passes with a **⅔ majority**.  
+* Concludes with a vote to restart the game or reset teams.
 
 &nbsp;
 
