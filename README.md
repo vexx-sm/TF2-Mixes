@@ -4,6 +4,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/vexx-sm/TF2-Mixes?label=Download&color=success&style=flat-square)](https://github.com/vexx-sm/TF2-Mixes/releases)
 [![License](https://img.shields.io/github/license/vexx-sm/TF2-Mixes?color=blue&style=flat-square)](LICENSE)
 ![GitHub all releases](https://img.shields.io/github/downloads/vexx-sm/TF2-Mixes/total?style=flat-square&color=orange)
+![Players Tracked](https://img.shields.io/badge/Tracking-152%20Players-6f42c1?style=flat-square)
 
 </div>
 
@@ -26,6 +27,9 @@ https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
     <img src="https://img.shields.io/badge/Add%20to%20Server-5865F2?style=for-the-badge&logo=discord&logoColor=white&labelColor=4f5bd5" alt="Invite Bot"/>
   </a>
 </p>
+
+</div>
+
 
 &nbsp;
 ## 🕹️ How It Works
@@ -161,22 +165,22 @@ Essentially the plugin cycles a game through 3 phases: `Pre-Game` ➔ `Draft` �
 > [!WARNING]
 > The plugin currently may conflict with SOAPdm; temporarily disable it for a proper experience.
 
----
+&nbsp;
 
-### 📸 Discord Bot Gallery
+## 📸 Discord Bot Examples
 
-<details>
-<summary>Click to view Discord Bot examples</summary>
 <br>
-<div align="center">
-  <img width="546" height="477" alt="regser" src="https://github.com/user-attachments/assets/6d6fa306-9133-4960-a895-182bcb05cce8" />
-  <img width="527" height="318" alt="reg" src="https://github.com/user-attachments/assets/1d4b40ab-0a0d-44b9-a528-d20ec8a52a1c" />
-  <img width="576" height="698" alt="mix discord" src="https://github.com/user-attachments/assets/9b49a50f-980d-4538-a212-6d2768de81fc" />
-  <img width="587" height="446" alt="image33" src="https://github.com/user-attachments/assets/f79367e9-04c3-401d-98b0-8e161ca475db" />
-  <img width="471" height="215" alt="rep" src="https://github.com/user-attachments/assets/4f354bae-feaf-4600-a4ec-b7bd114c57a3" />
-  <img width="967" height="856" alt="pug" src="https://github.com/user-attachments/assets/5130f6d2-1e2a-452b-90bb-9163417c9c4e" />
-  <img width="558" height="839" alt="elo" src="https://github.com/user-attachments/assets/74d6fbf9-f86b-471a-8870-f9b8d8a1a394" />
-</div>
-</details>
 
----
+<div align="center">
+
+| ELO & Leaderboards | Discord PUG |
+| :---: | :---: |
+| <img src="https://github.com/user-attachments/assets/74d6fbf9-f86b-471a-8870-f9b8d8a1a394" width="420" /> | <img src="https://github.com/user-attachments/assets/9b49a50f-980d-4538-a212-6d2768de81fc" width="420" /> 
+
+| Match History | Announcements |
+| :---: | :---: |
+| <img src="https://github.com/user-attachments/assets/3ebaa6eb-b1ec-4948-a2d0-2d8d3538383d" width="420" /> | <img src="https://github.com/user-attachments/assets/dca571a2-061d-4d27-bfc9-47a2b49fb0a1" width="420" /> |
+
+| Live PUG | `!rep`  |
+| :---: | :---: |
+| <img src="https://github.com/user-attachments/assets/5130f6d2-1e2a-452b-90bb-9163417c9c4e" width="420" /> | <img src="https://github.com/user-attachments/assets/4f354bae-feaf-4600-a4ec-b7bd114c57a3" width="420" /> |
