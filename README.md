@@ -1,6 +1,13 @@
 <div align="center">
 <h1>  ⚙️ TF2 PUGs Bot</h1>
+
+[![Latest Release](https://img.shields.io/github/v/release/vexx-sm/TF2-Mixes?label=Download&color=success&style=flat-square)](https://github.com/vexx-sm/TF2-Mixes/releases)
+[![License](https://img.shields.io/github/license/vexx-sm/TF2-Mixes?color=blue&style=flat-square)](LICENSE)
+![GitHub all releases](https://img.shields.io/github/downloads/vexx-sm/TF2-Mixes/total?style=flat-square&color=orange)
+
 </div>
+
+
 
 A SourceMod plugin that sets up **6s/hl PUGs** where 2 captains pick players in an **XYXY** order or slot based on Discord. Includes random drafting, votes, and more.
 
@@ -19,35 +26,36 @@ https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
 
 </div>
 
- ‍ 
+&nbsp;
 ## 🕹️ How It Works
-Essentially the plugin cycles a game through 3 phases: 
-`Pre-Game` ➔ `Draft` ➔ `Live Game`
+Essentially the plugin cycles a game through 3 phases: `Pre-Game` ➔ `Draft` ➔ `Live Game` 
 
-### 1. Pre Game
+### 🔴 1. Pre Game
 * Players use `!captain` or `!cap` to become (or drop as) a captain.  
-* Once two captains are selected **and at least 12 players are present**, all others are moved to spectator.  
+* Once two captains are selected **and at least 12 players are present**, all players are moved to spectator.  
 * Captains are randomly assigned to RED or BLU.
 
-### 2. Draft 
-* Captains pick players in order (**XYXY XYXY XY**). 
-* Captains and players may use `!remove` to drop a player or themselves (counts as a turn).  
-* Captains may use `!swap x y` to request a player for player swap between teams (counts as a turn).
-* Followed by RUP where players are auto moved to their vc and waiting for ready up.
+### 🟡 2. Draft 
+* Captains pick players in sequence (**XYXY XYXY XY**). 
+* Captains have a timed window to pick; failing to do so triggers a random pick.
+* Use `!remove` to drop a yourself or a player or `!swap x y` (as a captain) to propose a trade.
+* Followed by **RUP** where players are moved to their VCs.
 
-### 3. Live Game
-* Offclassing is punished outside of last point holds on 6s cp_ maps only.
-* Players can `!rep x` or `!rep me` to report and request a replacement of a player.
-* Any vote requires **30% of players to initiate**, and passes with **⅔ majority**.  
-* Followed by Post Game with a vote to restart game or reset teams.
+### 🟢 3. Live Game
+* **Restrictions:** Offclassing is restricted outside of last point holds (6s cp_ maps).
+* **Subs:** Players can `!rep x` or `!rep me` to request a replacement via Discord.
+* **Voting:** Requires **30% to initiate** and passes with a **⅔ majority**.  
+* **End:** Concludes with a vote to restart the game or reset teams.
 
- ‍ 
+&nbsp;
 
 ## ⌨️ Commands
 **Prefix:** `!` or `/`  
 *Most commands support 3+ aliases for convenience (e.g `!restart`, `!redraft`, `!reset`)*
 
 <br>
+
+
 
 <table>
   <tr>
@@ -138,8 +146,9 @@ Essentially the plugin cycles a game through 3 phases:
   </tr>
 </table>
 
+</div>
 
- ‍ 
+&nbsp;
 
 ## 🛠️ Installation
 
