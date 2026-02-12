@@ -45,7 +45,7 @@ Essentially the plugin cycles a game through 3 phases:
 
 ## ⌨️ Commands
 **Prefix:** `!` or `/`  
-*Most commands support 3+ aliases for convenience (e.g `!restart`, `!redraft`, `!reset*)*
+*Most commands support 3+ aliases for convenience (e.g `!restart`, `!redraft`, `!reset`)*
 
 <br>
 
