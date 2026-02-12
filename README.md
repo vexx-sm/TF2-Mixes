@@ -11,6 +11,13 @@
 
 A SourceMod plugin that sets up **6s/hl PUGs** where 2 captains pick players in an **XYXY** order or slot based on Discord. Includes random drafting, votes, and more.
 
+
+<div align="center">
+  
+https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
+
+</div>
+
 > [!NOTE]
 > An Optional discord bot is included to manage mixes in a [TF2Center-style](https://github.com/user-attachments/assets/9435c637-0174-4d7f-b3a2-2d9b3604e428) setup or the normal in game method with [Announcements](https://github.com/user-attachments/assets/eab70e8c-23f3-4764-b071-e4d4d917a2b2), [Elo and Leaderboards](https://github.com/user-attachments/assets/74d6fbf9-f86b-471a-8870-f9b8d8a1a394), [History](https://github.com/user-attachments/assets/3ebaa6eb-b1ec-4948-a2d0-2d8d3538383d), fully managed VC and more [integration](https://github.com/user-attachments/assets/1970b8f6-16bb-44b3-9110-58a87d0e728f).
 
@@ -19,12 +26,6 @@ A SourceMod plugin that sets up **6s/hl PUGs** where 2 captains pick players in 
     <img src="https://img.shields.io/badge/Add%20to%20Server-5865F2?style=for-the-badge&logo=discord&logoColor=white&labelColor=4f5bd5" alt="Invite Bot"/>
   </a>
 </p>
-
-<div align="center">
-  
-https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
-
-</div>
 
 &nbsp;
 ## 🕹️ How It Works
