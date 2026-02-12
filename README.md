@@ -72,9 +72,6 @@ Essintially the plugin cycles a game through 3 phases, `Pre-Game` > `Draft` > `L
 > [!WARNING]
 > The plugin currently may conflict with SOAPdm, temporarily disable it for a proper experience.
 
-> [!WARNING]
-> Linking your server with the Discord bot may fail under some hosting services, use `/ip` in game to override the public ip of your hosting machine before registering on discord
-
 ---
 
 **Requests & Contributions are welcome!**
