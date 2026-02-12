@@ -1,8 +1,8 @@
 A SourceMod plugin that sets up a **6s/hl PUGs** where 2 captains pick players in an **XYXY** order or slot based on discord. Includes random drafting, votes, and more.
 
 > [!NOTE]
-> An Optional discord bot is included to manage mixes in a [TF2Center-style](https://github.com/user-attachments/assets/9435c637-0174-4d7f-b3a2-2d9b3604e428) setup or the normal in game method with [Announcements](https://github.com/user-attachments/assets/eab70e8c-23f3-4764-b071-e4d4d917a2b2), [History](https://github.com/user-attachments/assets/3ebaa6eb-b1ec-4948-a2d0-2d8d3538383d), fully managed VC and more [integration](https://github.com/user-attachments/assets/1970b8f6-16bb-44b3-9110-58a87d0e728f).
- 
+> An Optional discord bot is included to manage mixes in a [TF2Center-style](https://github.com/user-attachments/assets/9435c637-0174-4d7f-b3a2-2d9b3604e428) setup or the normal in game method with [Announcements](https://github.com/user-attachments/assets/eab70e8c-23f3-4764-b071-e4d4d917a2b2), [Elo and Leaderboards](https://github.com/user-attachments/assets/74d6fbf9-f86b-471a-8870-f9b8d8a1a394), [History](https://github.com/user-attachments/assets/3ebaa6eb-b1ec-4948-a2d0-2d8d3538383d), fully managed VC and more [integration](https://github.com/user-attachments/assets/1970b8f6-16bb-44b3-9110-58a87d0e728f).
+
  <p align="center">
   <a href="https://discord.com/oauth2/authorize?client_id=1429868144322936895&permissions=272067664&scope=bot%20applications.commands">
     <img src="https://img.shields.io/badge/Add%20to%20Server-5865F2?style=for-the-badge&logo=discord&logoColor=white&labelColor=4f5bd5" alt="Invite Bot"/>
@@ -87,4 +87,5 @@ Essintially the plugin cycles a game through 3 phases, `Pre-Game` > `Draft` > `L
 <img width="587" height="446" alt="image33" src="https://github.com/user-attachments/assets/f79367e9-04c3-401d-98b0-8e161ca475db" />
 <img width="471" height="215" alt="rep" src="https://github.com/user-attachments/assets/4f354bae-feaf-4600-a4ec-b7bd114c57a3" />
 <img width="967" height="856" alt="pug" src="https://github.com/user-attachments/assets/5130f6d2-1e2a-452b-90bb-9163417c9c4e" />
+<img width="558" height="839" alt="elo" src="https://github.com/user-attachments/assets/74d6fbf9-f86b-471a-8870-f9b8d8a1a394" />
 
