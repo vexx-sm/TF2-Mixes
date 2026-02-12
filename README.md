@@ -1,8 +1,8 @@
 <div align="center">
 <h1>  ⚙️ TF2 PUGs Bot</h1>
 
-[![Latest Release](https://img.shields.io/github/v/release/vexx-sm/TF2-Mixes?label=Download&color=success&style=flat-square)](https://github.com/vexx-sm/TF2-Mixes/releases)
-![GitHub all releases](https://img.shields.io/github/downloads/vexx-sm/TF2-Mixes/total?style=flat-square&color=orange)
+[![Latest Release](https://img.shields.io/github/v/release/vexx-sm/TF2-PUGBot?label=Download&color=success&style=flat-square)](https://github.com/vexx-sm/TF2-PUGBot/releases)
+![GitHub all releases](https://img.shields.io/github/downloads/vexx-sm/TF2-PUGBot/total?style=flat-square&color=orange)
 ![Players Tracked](https://img.shields.io/badge/Tracking-152%20Players-6f42c1?style=flat-square)
 
 </div>
