@@ -183,3 +183,9 @@ Essentially the plugin cycles a game through 3 phases: `Pre-Game` ➔ `Draft` �
 | Live PUG | `!rep`  |
 | :---: | :---: |
 | <img src="https://github.com/user-attachments/assets/5130f6d2-1e2a-452b-90bb-9163417c9c4e" width="420" /> | <img src="https://github.com/user-attachments/assets/4f354bae-feaf-4600-a4ec-b7bd114c57a3" width="420" /> |
+
+<p align="right">
+   <a href="https://github.com/vexx-sm/TF2-PUGBot#%EF%B8%8F-tf2-pugs-bot">
+      <img src="https://img.shields.io/badge/Back%20to%20Top-↑-gray?style=flat-square" />
+   </a>
+</p>
