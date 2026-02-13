@@ -19,7 +19,7 @@ https://github.com/user-attachments/assets/fb3d677a-5315-4551-b1b8-d51c46d8e3a1
 </div>
 
 > [!NOTE]
-> A discord bot is included with features such as **Announcements**, **Elo / Leaderboards**,**Game Status & History**, **Fully managed VC** and much more.
+> A discord bot is included with features such as **Announcements**, **Elo / Leaderboards**, **Game Status & History**, **Fully managed VC** and much more.
 
 <p align="center">
 
