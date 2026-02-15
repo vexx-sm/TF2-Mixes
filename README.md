@@ -166,23 +166,21 @@ Essentially the plugin cycles a game through 3 phases: `Pre-Game` ➔ `Draft` �
 
 &nbsp;
 
-## 📸 Discord Bot Examples
-
 <br>
 
 <div align="center">
 
-| ELO & Leaderboards | Discord PUG |
+| ELO/ Log history | Leaderboard |
 | :---: | :---: |
-| <img src="https://github.com/user-attachments/assets/74d6fbf9-f86b-471a-8870-f9b8d8a1a394" width="420" /> | <img src="https://github.com/user-attachments/assets/9b49a50f-980d-4538-a212-6d2768de81fc" width="420" /> 
+| <img src="https://github.com/user-attachments/assets/224b9c97-1d85-4af3-ab88-8994b404ee70" width="420" /> | <img src="https://github.com/user-attachments/assets/0a0d90aa-708e-410e-957e-ed7c6ba93db2" width="420" /> 
 
 | Match History | Announcements |
 | :---: | :---: |
 | <img src="https://github.com/user-attachments/assets/3ebaa6eb-b1ec-4948-a2d0-2d8d3538383d" width="420" /> | <img src="https://github.com/user-attachments/assets/dca571a2-061d-4d27-bfc9-47a2b49fb0a1" width="420" /> |
 
-| Live PUG | `!rep`  |
+| Live PUG | Discord PUG  |
 | :---: | :---: |
-| <img src="https://github.com/user-attachments/assets/5130f6d2-1e2a-452b-90bb-9163417c9c4e" width="420" /> | <img src="https://github.com/user-attachments/assets/4f354bae-feaf-4600-a4ec-b7bd114c57a3" width="420" /> |
+| <img src="https://github.com/user-attachments/assets/5130f6d2-1e2a-452b-90bb-9163417c9c4e" width="420" /> | <img src="https://github.com/user-attachments/assets/9b49a50f-980d-4538-a212-6d2768de81fc" width="420" /> |
 
 <p align="right">
    <a href="https://github.com/vexx-sm/TF2-PUGBot#%EF%B8%8F-tf2-pugs-bot">
